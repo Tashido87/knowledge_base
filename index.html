@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f1115">
+    
+    <title>KnowledgeBase</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+    <nav class="app-nav" id="appNav">
+        <div class="nav-brand">KnowledgeBase</div>
+        <div class="nav-links">
+            <button class="nav-btn active" onclick="switchView('garden')">Library</button>
+            <button class="nav-btn" onclick="switchView('collection')">Favorites</button>
+            
+            <button class="nav-btn theme-btn" id="themeToggle" onclick="toggleTheme()">
+                <i data-lucide="sun" width="20" height="20"></i>
+            </button>
+        </div>
+    </nav>
+
+    <div class="app-container">
+        
+        <div id="view-garden" class="view-section active">
+            <div class="sticky-controls">
+                <div class="search-group">
+                    <div class="input-wrapper">
+                        <input type="text" id="searchInput" placeholder="Search questions, tags...">
+                        <button id="clearSearch" class="clear-btn hidden">
+                            <i data-lucide="x" width="16" height="16"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="filter-group-inline">
+                    <select id="sortSelect" class="compact-select">
+                        <option value="newest">Newest</option>
+                        <option value="oldest">Oldest</option>
+                        <option value="az">A - Z</option>
+                        <option value="random">Random</option>
+                    </select>
+                    <select id="catSelect" class="compact-select">
+                        <option value="all">All Categories</option>
+                    </select>
+                </div>
+            </div>
+
+            <main id="cardGrid" class="grid-container">
+                <div class="loading">Loading data...</div>
+            </main>
+        </div>
+
+        <div id="view-collection" class="view-section">
+            <header class="section-header">
+                <h2>Your Collection</h2>
+                <p>Saved items</p>
+            </header>
+            <main id="favGrid" class="grid-container"></main>
+        </div>
+
+    </div>
+
+    <div id="modalOverlay" class="modal-overlay">
+        <button class="modal-love-btn" id="modalLoveBtn">
+            <i data-lucide="heart" width="20" height="20"></i>
+        </button>
+        <button class="close-btn" id="closeModal">
+            <i data-lucide="x" width="24" height="24"></i>
+        </button>
+
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-badge" id="m-category">Category</span>
+                <h2 id="m-question">Question Title</h2>
+            </div>
+            <div class="modal-body">
+                <div id="m-answer" class="answer-content"></div>
+                <div class="info-row">
+                    <div class="small-block">
+                        <h4>Tags</h4>
+                        <div id="m-tags" class="tags-container"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-swift.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    
+    <script src="script.js"></script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
