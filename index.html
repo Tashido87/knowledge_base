@@ -1,106 +1,340 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-theme="light">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#0f1115">
-    
-    <title>KnowledgeBase</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="style.css">
-    <script src="https://unpkg.com/lucide@latest"></script>
-</head>
-<body>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f8fafc" />
 
-    <nav class="app-nav" id="appNav">
-        <div class="nav-brand">KnowledgeOcean</div>
-        <div class="nav-links">
-            <button class="nav-btn active" onclick="switchView('garden')">Library</button>
-            <button class="nav-btn" onclick="switchView('collection')">Favorites</button>
-            
-            <button class="nav-btn theme-btn" id="themeToggle" onclick="toggleTheme()">
-                <i data-lucide="sun" width="20" height="20"></i>
-            </button>
-        </div>
+  <title>KnowledgeOcean</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <!-- Prism (code highlighting) -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+  <!-- Ambient background -->
+  <div class="ambient" aria-hidden="true"></div>
+
+  <!-- App Header (always visible; fixes missing tabs on mobile) -->
+  <header class="app-header" id="appHeader">
+    <div class="header-row">
+      <button class="brand" type="button" id="brandBtn" aria-label="Scroll to top">
+        <span class="brand-mark" aria-hidden="true">
+          <i data-lucide="droplet" width="18" height="18"></i>
+        </span>
+        <span class="brand-name">KnowledgeOcean</span>
+      </button>
+
+      <div class="header-actions">
+        <button class="icon-btn" id="openFiltersBtn" type="button" aria-label="Open filters">
+          <i data-lucide="sliders-horizontal" width="18" height="18"></i>
+        </button>
+
+        <button class="icon-btn" id="themeToggle" type="button" aria-label="Toggle theme">
+          <i data-lucide="sun" width="18" height="18"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Primary navigation -->
+    <nav class="tabs" aria-label="Primary">
+      <button class="tab active" type="button" data-view="library" aria-current="page">
+        <i data-lucide="library" width="16" height="16"></i>
+        <span>Library</span>
+      </button>
+      <button class="tab" type="button" data-view="saved">
+        <i data-lucide="heart" width="16" height="16"></i>
+        <span>Saved</span>
+      </button>
+      <button class="tab" type="button" data-view="study">
+        <i data-lucide="graduation-cap" width="16" height="16"></i>
+        <span>Study</span>
+      </button>
     </nav>
 
-    <div class="app-container">
-        
-        <div id="view-garden" class="view-section active">
-            <div class="sticky-controls">
-                <div class="search-group">
-                    <div class="input-wrapper">
-                        <input type="text" id="searchInput" placeholder="Search questions, tags...">
-                        <button id="clearSearch" class="clear-btn hidden">
-                            <i data-lucide="x" width="16" height="16"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="filter-group-inline">
-                    <select id="sortSelect" class="compact-select">
-                        <option value="newest">Newest</option>
-                        <option value="oldest">Oldest</option>
-                        <option value="az">A - Z</option>
-                        <option value="random">Random</option>
-                    </select>
-                    <select id="catSelect" class="compact-select">
-                        <option value="all">All Categories</option>
-                    </select>
-                </div>
-            </div>
-
-            <main id="cardGrid" class="grid-container">
-                <div class="loading">Loading data...</div>
-            </main>
-        </div>
-
-        <div id="view-collection" class="view-section">
-            <header class="section-header">
-                <h2>Your Collection</h2>
-                <p>Saved items</p>
-            </header>
-            <main id="favGrid" class="grid-container"></main>
-        </div>
-
-    </div>
-
-    <div id="modalOverlay" class="modal-overlay">
-        <button class="modal-love-btn" id="modalLoveBtn">
-            <i data-lucide="heart" width="20" height="20"></i>
+    <!-- Library tools (search + quick actions) -->
+    <section class="tools" id="libraryTools" aria-label="Library tools">
+      <div class="search" role="search">
+        <i class="search-icon" data-lucide="search" width="18" height="18" aria-hidden="true"></i>
+        <input id="searchInput" type="text" inputmode="search"
+               placeholder="Search questions, tags… (press /)"
+               autocomplete="off" />
+        <button class="icon-btn ghost hidden" id="clearSearchBtn" type="button" aria-label="Clear search">
+          <i data-lucide="x" width="16" height="16"></i>
         </button>
-        <button class="close-btn" id="closeModal">
-            <i data-lucide="x" width="24" height="24"></i>
+      </div>
+
+      <div class="quick">
+        <button class="pill-btn" id="studyFilteredBtn" type="button">
+          <i data-lucide="sparkles" width="16" height="16"></i>
+          Study filtered
         </button>
+      </div>
+    </section>
+  </header>
 
-        <div class="modal-content">
-            <div class="modal-header">
-                <span class="modal-badge" id="m-category">Category</span>
-                <h2 id="m-question">Question Title</h2>
-            </div>
-            <div class="modal-body">
-                <div id="m-answer" class="answer-content"></div>
-                <div class="info-row">
-                    <div class="small-block">
-                        <h4>Tags</h4>
-                        <div id="m-tags" class="tags-container"></div>
-                    </div>
-                </div>
-            </div>
+  <main class="app" id="app">
+    <!-- Library -->
+    <section class="view active" id="view-library" aria-label="Library view">
+      <div class="subbar">
+        <div class="subbar-left">
+          <div class="meta" id="resultMeta">Loading…</div>
         </div>
-    </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-swift.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
-    
-    <script src="script.js"></script>
-    <script>lucide.createIcons();</script>
+        <!-- Desktop inline filters -->
+        <div class="subbar-right" id="inlineFilters">
+          <label class="select">
+            <span class="sr-only">Sort</span>
+            <select id="sortSelect" aria-label="Sort">
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="az">A → Z</option>
+              <option value="random">Random</option>
+            </select>
+          </label>
+
+          <label class="select">
+            <span class="sr-only">Category</span>
+            <select id="catSelect" aria-label="Category">
+              <option value="all">All categories</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="empty hidden" id="emptyState">
+        <div class="empty-icon" aria-hidden="true">
+          <i data-lucide="search-x" width="20" height="20"></i>
+        </div>
+        <h3>No results</h3>
+        <p>Try a different keyword or category.</p>
+        <button class="pill-btn" id="resetFiltersBtn" type="button">
+          <i data-lucide="rotate-ccw" width="16" height="16"></i>
+          Reset filters
+        </button>
+      </div>
+
+      <section class="grid" id="cardGrid" aria-label="Knowledge cards">
+        <!-- skeleton -->
+        <div class="skeleton-grid" id="skeleton">
+          <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+          <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+        </div>
+      </section>
+
+      <!-- Pagination (Library only) -->
+      <nav class="pagination hidden" id="pagination" aria-label="Library pages"></nav>
+    </section>
+
+    <!-- Saved -->
+    <section class="view" id="view-saved" aria-label="Saved view">
+      <div class="view-head">
+        <h2>Saved</h2>
+        <p>Your favorites across devices (stored locally on this browser).</p>
+        <button class="pill-btn" id="studySavedBtn" type="button">
+          <i data-lucide="sparkles" width="16" height="16"></i>
+          Study saved
+        </button>
+      </div>
+
+      <div class="empty hidden" id="savedEmpty">
+        <div class="empty-icon" aria-hidden="true">
+          <i data-lucide="heart-off" width="20" height="20"></i>
+        </div>
+        <h3>No saved items</h3>
+        <p>Tap the heart on any card to save it.</p>
+        <button class="pill-btn" id="goLibraryBtn" type="button">
+          <i data-lucide="arrow-left" width="16" height="16"></i>
+          Go to Library
+        </button>
+      </div>
+
+      <section class="grid" id="favGrid" aria-label="Saved cards"></section>
+    </section>
+
+    <!-- Study -->
+    <section class="view" id="view-study" aria-label="Study view">
+      <div class="view-head">
+        <h2>Study</h2>
+        <p>Flashcard mode for fast recall. Reveal with <kbd>Space</kbd>, next with <kbd>→</kbd>.</p>
+      </div>
+
+      <div class="study-shell">
+        <div class="study-toolbar">
+          <div class="segmented" role="tablist" aria-label="Study deck">
+            <button class="seg active" type="button" data-deck="saved" role="tab" aria-selected="true">Saved</button>
+            <button class="seg" type="button" data-deck="filtered" role="tab" aria-selected="false">Filtered</button>
+            <button class="seg" type="button" data-deck="all" role="tab" aria-selected="false">All</button>
+          </div>
+
+          <div class="study-actions">
+            <button class="icon-btn" id="studyShuffleBtn" type="button" aria-label="Shuffle deck">
+              <i data-lucide="shuffle" width="18" height="18"></i>
+            </button>
+            <button class="icon-btn" id="studyRestartBtn" type="button" aria-label="Restart">
+              <i data-lucide="rotate-ccw" width="18" height="18"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="study-meta">
+          <span class="badge" id="studyBadge">—</span>
+          <span class="muted" id="studyProgress">0 / 0</span>
+        </div>
+
+        <article class="study-card" id="studyCard" tabindex="0" aria-label="Flashcard">
+          <header class="study-front">
+            <div class="study-kicker" id="studyCategory">—</div>
+            <h3 class="study-question" id="studyQuestion">Choose a deck to start.</h3>
+            <div class="study-tags" id="studyTags"></div>
+
+            <div class="study-cta">
+              <button class="pill-btn" id="studyRevealBtn" type="button">
+                <i data-lucide="eye" width="16" height="16"></i>
+                Reveal answer
+              </button>
+              <button class="pill-btn ghost" id="studyOpenDetailBtn" type="button">
+                <i data-lucide="arrow-up-right" width="16" height="16"></i>
+                Open details
+              </button>
+            </div>
+          </header>
+
+          <section class="study-back hidden" id="studyAnswerWrap" aria-label="Answer">
+            <div class="answer" id="studyAnswer"></div>
+          </section>
+        </article>
+
+        <div class="study-nav">
+          <button class="pill-btn ghost" id="studyPrevBtn" type="button">
+            <i data-lucide="arrow-left" width="16" height="16"></i>
+            Prev
+          </button>
+          <button class="pill-btn" id="studyNextBtn" type="button">
+            Next
+            <i data-lucide="arrow-right" width="16" height="16"></i>
+          </button>
+        </div>
+
+        <div class="empty hidden" id="studyEmpty">
+          <div class="empty-icon" aria-hidden="true">
+            <i data-lucide="layers" width="20" height="20"></i>
+          </div>
+          <h3>Nothing to study</h3>
+          <p>Save some cards or broaden your filters.</p>
+          <button class="pill-btn" id="studyGoLibraryBtn" type="button">
+            <i data-lucide="library" width="16" height="16"></i>
+            Browse Library
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Mobile filter drawer -->
+  <div class="drawer" id="filterDrawer" aria-hidden="true">
+    <div class="drawer-overlay" data-close-drawer="true"></div>
+    <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="Filters">
+      <div class="drawer-head">
+        <div>
+          <h3>Filters</h3>
+          <p class="muted">Refine what you see in Library.</p>
+        </div>
+        <button class="icon-btn" type="button" data-close-drawer="true" aria-label="Close filters">
+          <i data-lucide="x" width="18" height="18"></i>
+        </button>
+      </div>
+
+      <div class="drawer-body">
+        <label class="field">
+          <span>Sort</span>
+          <select id="sortSelectMobile" aria-label="Sort (mobile)">
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="az">A → Z</option>
+            <option value="random">Random</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Category</span>
+          <select id="catSelectMobile" aria-label="Category (mobile)">
+            <option value="all">All categories</option>
+          </select>
+        </label>
+
+        <div class="drawer-actions">
+          <button class="pill-btn" id="applyFiltersBtn" type="button">
+            <i data-lucide="check" width="16" height="16"></i>
+            Apply
+          </button>
+          <button class="pill-btn ghost" id="resetFiltersBtnMobile" type="button">
+            <i data-lucide="rotate-ccw" width="16" height="16"></i>
+            Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail modal -->
+  <div class="modal" id="modal" aria-hidden="true">
+    <div class="modal-overlay" data-close-modal="true"></div>
+
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="m-title">
+      <div class="modal-top">
+        <div class="modal-top-left">
+          <span class="badge" id="m-category">Category</span>
+        </div>
+
+        <div class="modal-top-right">
+          <button class="icon-btn" id="modalShareBtn" type="button" aria-label="Share">
+            <i data-lucide="share-2" width="18" height="18"></i>
+          </button>
+          <button class="icon-btn" id="modalLoveBtn" type="button" aria-label="Save">
+            <i data-lucide="heart" width="18" height="18"></i>
+          </button>
+          <button class="icon-btn" id="closeModalBtn" type="button" aria-label="Close">
+            <i data-lucide="x" width="18" height="18"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-body" id="modalBody">
+        <h2 class="modal-title" id="m-title">Title</h2>
+        <div class="answer" id="m-answer"></div>
+
+        <div class="divider"></div>
+
+        <div class="tag-block">
+          <h4>Tags</h4>
+          <div class="tags" id="m-tags"></div>
+          <p class="muted small">Tip: tap a tag to search it in Library.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div class="toasts" id="toastStack" aria-live="polite" aria-relevant="additions"></div>
+
+  <!-- Prism -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-swift.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+
+  <script src="script.js"></script>
+  <script>lucide.createIcons();</script>
 </body>
 </html>
