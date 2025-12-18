@@ -876,7 +876,8 @@ pre[class*="language-"], code[class*="language-"] {
     top: auto;
     bottom: 0;
     width: 100%;
-    max-height: calc(100vh - 12px);
+    /* CHANGED: Increased gap from 12px to 60px to clear mobile status bar */
+    max-height: calc(100vh - 60px);
     transform: translate(0, 16px);
     border-radius: 22px 22px 0 0;
   }
