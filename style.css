@@ -153,6 +153,20 @@ body {
   justify-content: space-between;
 }
 
+/* --- Header Layout Groups --- */
+.nav-group {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.nav-icons {
+  display: flex;
+  gap: 0.5rem;
+  padding-left: 1.5rem;
+  border-left: 1px solid var(--border-light);
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -214,54 +228,28 @@ body {
   transform: translateY(-1px);
 }
 
-/* Tab Navigation */
-.tab-nav {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: 0 1rem;
-  display: flex;
-  gap: 0.5rem;
-  border-bottom: 1px solid var(--border-light);
-}
-
+/* --- Tab Buttons (Icon Style) --- */
 .tab-btn {
-  position: relative;
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  border: none;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 1rem 1.5rem;
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-weight: 600;
-  font-size: 0.9375rem;
+  justify-content: center;
   cursor: pointer;
-  transition: color var(--transition-fast);
+  transition: all var(--transition-fast);
 }
 
 .tab-btn:hover {
+  background: var(--bg-tertiary);
   color: var(--text-primary);
 }
 
 .tab-btn.active {
+  background: var(--accent-light);
   color: var(--accent-primary);
-}
-
-.tab-indicator {
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--accent-primary);
-  opacity: 0;
-  transform: scaleX(0);
-  transition: all var(--transition-base);
-}
-
-.tab-btn.active .tab-indicator {
-  opacity: 1;
-  transform: scaleX(1);
 }
 
 /* =============================================
@@ -322,8 +310,8 @@ body {
 
 .toolbar {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: 0.5rem; /* Reduced gap */
+  margin-bottom: 1rem;
   flex-wrap: wrap;
 }
 
@@ -334,7 +322,8 @@ body {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.75rem; /* Compact Padding */
+  min-height: 42px; /* Fixed height */
   background: var(--bg-secondary);
   border: 2px solid var(--border-light);
   border-radius: var(--radius-lg);
@@ -387,11 +376,12 @@ body {
 
 .filter-group {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .filter-select {
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 2rem 0.5rem 0.75rem; /* Compact padding */
+  min-height: 42px; /* Fixed height */
   background: var(--bg-secondary);
   border: 2px solid var(--border-light);
   border-radius: var(--radius-lg);
@@ -437,24 +427,29 @@ body {
 
 .quick-actions {
   display: flex;
+  flex-direction: row; /* Force horizontal row */
+  align-items: center;
   gap: 0.75rem;
   margin-bottom: 1.5rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* Prevent wrapping */
 }
 
 .action-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.25rem;
+  padding: 0.5rem 1rem; /* Compact padding */
   background: var(--bg-secondary);
   border: 2px solid var(--border-light);
   border-radius: var(--radius-lg);
   color: var(--text-primary);
   font-weight: 600;
-  font-size: 0.9375rem;
+  font-size: 0.875rem; /* Slightly smaller text */
   cursor: pointer;
   transition: all var(--transition-fast);
+  flex: 1; /* Share width equally */
+  white-space: nowrap; /* Prevent text break */
 }
 
 .action-btn:hover {
@@ -912,7 +907,7 @@ body {
   margin: 1.5rem 0;
   border-radius: var(--radius-lg);
   border: 2px solid var(--border-light);
-  font-size: 0.85rem; /* CHANGED: Reduced font size for code blocks */
+  font-size: 0.85rem; 
 }
 
 .flashcard-actions {
@@ -1106,7 +1101,7 @@ body {
   margin: 1.5rem 0;
   border-radius: var(--radius-lg);
   border: 2px solid var(--border-light);
-  font-size: 0.85rem; /* CHANGED: Reduced font size for code blocks */
+  font-size: 0.85rem; 
 }
 
 .modal-tags {
@@ -1301,21 +1296,28 @@ body {
    ============================================= */
 
 @media (max-width: 768px) {
-  /* 1. HEADER: Make brand text visible */
+  /* 1. HEADER */
+  
+  /* Make brand text visible */
   .brand-text {
     display: block; 
     font-size: 1rem;
   }
-
-  /* 2. TABS: Simplify tab buttons */
-  .tab-btn span {
-    display: none;
+  
+  /* Hide text on very small screens to fit icons */
+  @media (max-width: 600px) {
+    .brand-text {
+      display: none;
+    }
+    .nav-group {
+      gap: 0.5rem;
+    }
+    .nav-icons {
+      padding-left: 0.5rem;
+    }
   }
-  .tab-btn {
-    padding: 1rem;
-  }
 
-  /* 3. TOOLBAR: Stack elements vertically */
+  /* 2. TOOLBAR: Stack elements vertically */
   .toolbar {
     flex-direction: column;
     gap: 0.75rem;
@@ -1325,35 +1327,80 @@ body {
     min-width: 100%;
   }
 
-  /* --- KEY FIX: Show Options Directly --- */
-  
-  /* Force the dropdowns to appear */
+  /* Show Options Directly */
   .filter-select {
     display: block !important; 
-    width: 100%;              /* Full width for easier tapping */
+    width: 100%;              
     margin-bottom: 0.5rem;
   }
 
-  /* Hide the "Filter" button since we are showing options directly */
   .filter-btn {
     display: none !important;
   }
 
-  /* -------------------------------------- */
-
+  /* Force Horizontal Row for Quick Actions */
   .quick-actions {
-    flex-direction: column;
+    flex-direction: row !important; /* Override vertical stacking */
   }
 
   .action-btn {
-    width: 100%;
+    flex: 1;
     justify-content: center;
   }
 
+  /* --- 3. TWO-COLUMN GRID FIX (PERFECT FIT) --- */
+  
   .cards-grid {
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(2, 1fr) !important; /* Force 2 columns */
+    gap: 0.75rem; /* Reduce gap to fit content */
   }
+
+  /* Compact Card Styles for Mobile */
+  .card {
+    padding: 0.75rem; /* Less padding inside cards */
+  }
+
+  .card-header {
+    margin-bottom: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .card-category {
+    font-size: 0.65rem; /* Smaller category text */
+    padding: 0.25rem 0.5rem;
+  }
+
+  /* Smaller Bookmark Button */
+  .bookmark-btn {
+    width: 28px;
+    height: 28px;
+  }
+  .bookmark-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* Smaller Title */
+  .card-title {
+    font-size: 0.9rem;
+    line-height: 1.3;
+    margin-bottom: 0.5rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Smaller Tags */
+  .tag {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.4rem;
+  }
+  .card-tags {
+    gap: 0.25rem;
+  }
+
+  /* ------------------------------------------- */
 
   .view-header {
     flex-direction: column;
