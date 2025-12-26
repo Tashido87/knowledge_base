@@ -1,1073 +1,1072 @@
-// KnowledgeOcean - Modern JavaScript Implementation
-// ===================================================
+/* =========================================================
+   KnowledgeOcean — Polished UI (calm, white-based, responsive)
+   ---------------------------------------------------------
+   Google Sheets columns expected:
+   A: Question
+   B: Answer
+   C: Category
+   D: Tags (comma-separated)
+   G-L: Snippets (optional)
+   ========================================================= */
 
-// Configuration
-const CONFIG = {
-  API_KEY: "AIzaSyD1mbSNTOVDpWe1voq9UeG0l-KzieTOB9Q",
-  SHEET_ID: "1U0aZe4LUU5qL3seGHRr2Wakb6-NIz_KLlWPSYz4P_3I",
-  TAB_NAME: "Sheet1",
-  RANGE: "Sheet1!A2:L",
-  ITEMS_PER_PAGE: 20,
-  PAGE_WINDOW: 5
+/* =========================
+   CONFIGURATION (edit these)
+   ========================= */
+const API_KEY = "AIzaSyD1mbSNTOVDpWe1voq9UeG0l-KzieTOB9Q";
+const SHEET_ID = "1U0aZe4LUU5qL3seGHRr2Wakb6-NIz_KLlWPSYz4P_3I";
+const TAB_NAME = "Sheet1";
+const RANGE = `${TAB_NAME}!A2:L`;
+const API_URL = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${RANGE}?key=${API_KEY}`;
+
+/* =========================
+   Local storage keys
+   ========================= */
+const LS_THEME = "kb_theme";
+const LS_FAVS = "kb_favs";
+const LS_VIEW = "kb_view";
+
+/* =========================
+   State
+   ========================= */
+let allData = [];
+let cardElements = new Map(); // id -> HTMLElement (Library cards)
+let favorites = new Set(JSON.parse(localStorage.getItem(LS_FAVS) || "[]"));
+let currentModalId = null;
+let lastFocusedElement = null;
+
+// Pagination (Library)
+const ITEMS_PER_PAGE = 20;
+const PAGE_WINDOW = 5; // show 5 page numbers
+let currentPage = 1;
+let lastTotalPages = 1;
+
+// Pull to Refresh State
+let ptrStartY = 0;
+let ptrDist = 0;
+let isRefreshing = false;
+const PTR_THRESHOLD = 80; // pixels to pull down to trigger
+
+/* =========================
+   DOM
+   ========================= */
+const $ = (sel, root = document) => root.querySelector(sel);
+
+const grid = $("#cardGrid");
+const favGrid = $("#favGrid");
+const skeleton = $("#skeleton");
+
+const emptyState = $("#emptyState");
+const savedEmpty = $("#savedEmpty");
+
+const resultMeta = $("#resultMeta");
+
+const pagination = $("#pagination");
+
+const tabs = Array.from(document.querySelectorAll(".tab"));
+const views = {
+  library: $("#view-library"),
+  saved: $("#view-saved"),
 };
 
-CONFIG.API_URL = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${CONFIG.RANGE}?key=${CONFIG.API_KEY}`;
+const libraryTools = $("#libraryTools");
 
-// Storage Keys
-const STORAGE = {
-  THEME: 'kb_theme',
-  BOOKMARKS: 'kb_bookmarks',
-  VIEW: 'kb_current_view'
-};
+const searchInput = $("#searchInput");
+const clearSearchBtn = $("#clearSearchBtn");
+const resetFiltersBtn = $("#resetFiltersBtn");
 
-// State Management
-const state = {
-  allData: [],
-  bookmarks: new Set(JSON.parse(localStorage.getItem(STORAGE.BOOKMARKS) || '[]')),
-  currentView: 'library',
-  currentPage: 1,
-  totalPages: 1,
-  filters: {
-    search: '',
-    category: 'all',
-    sort: 'newest'
-  },
-  study: {
-    deck: [],
-    deckType: 'saved',
-    currentIndex: 0,
-    revealed: false
-  },
-  currentModalId: null
-};
+const sortSelect = $("#sortSelect");
+const catSelect = $("#catSelect");
+const sortSelectMobile = $("#sortSelectMobile");
+const catSelectMobile = $("#catSelectMobile");
+const openFiltersBtn = $("#openFiltersBtn");
 
-// DOM Elements
-const DOM = {
-  // Navigation
-  nav: document.getElementById('mainNav'),
-  brandBtn: document.getElementById('brandBtn'),
-  themeToggle: document.getElementById('themeToggle'),
-  tabBtns: document.querySelectorAll('.tab-btn'),
-  
-  // Views
-  views: {
-    library: document.getElementById('view-library'),
-    saved: document.getElementById('view-saved'),
-    study: document.getElementById('view-study')
-  },
-  
-  // Library
-  searchInput: document.getElementById('searchInput'),
-  clearSearchBtn: document.getElementById('clearSearchBtn'),
-  categoryFilter: document.getElementById('categoryFilter'),
-  sortFilter: document.getElementById('sortFilter'),
-  mobileFilterBtn: document.getElementById('mobileFilterBtn'),
-  resetFiltersBtn: document.getElementById('resetFiltersBtn'),
-  resetFromEmpty: document.getElementById('resetFromEmpty'),
-  studyFilteredBtn: document.getElementById('studyFilteredBtn'),
-  cardsGrid: document.getElementById('cardsGrid'),
-  pagination: document.getElementById('pagination'),
-  resultsMeta: document.getElementById('resultsMeta'),
-  emptyState: document.getElementById('emptyState'),
-  
-  // Saved
-  savedGrid: document.getElementById('savedGrid'),
-  savedEmpty: document.getElementById('savedEmpty'),
-  studySavedBtn: document.getElementById('studySavedBtn'),
-  goToLibraryBtn: document.getElementById('goToLibraryBtn'),
-  
-  // Study
-  deckBtns: document.querySelectorAll('.deck-btn'),
-  shuffleDeckBtn: document.getElementById('shuffleDeckBtn'),
-  restartDeckBtn: document.getElementById('restartDeckBtn'),
-  studyProgress: document.getElementById('studyProgress'),
-  flashcard: document.getElementById('flashcard'),
-  cardCategory: document.getElementById('cardCategory'),
-  cardQuestion: document.getElementById('cardQuestion'),
-  cardTags: document.getElementById('cardTags'),
-  cardBack: document.getElementById('cardBack'),
-  cardAnswer: document.getElementById('cardAnswer'),
-  revealBtn: document.getElementById('revealBtn'),
-  detailsBtn: document.getElementById('detailsBtn'),
-  prevCardBtn: document.getElementById('prevCardBtn'),
-  nextCardBtn: document.getElementById('nextCardBtn'),
-  studyEmpty: document.getElementById('studyEmpty'),
-  studyGoLibraryBtn: document.getElementById('studyGoLibraryBtn'),
-  
-  // Modal
-  modal: document.getElementById('detailModal'),
-  modalCategory: document.getElementById('modalCategory'),
-  modalTitle: document.getElementById('modalTitle'),
-  modalAnswer: document.getElementById('modalAnswer'),
-  modalTags: document.getElementById('modalTags'),
-  modalShareBtn: document.getElementById('modalShareBtn'),
-  modalBookmarkBtn: document.getElementById('modalBookmarkBtn'),
-  modalCloseBtn: document.getElementById('modalCloseBtn'),
-  
-  // Drawer
-  drawer: document.getElementById('filterDrawer'),
-  categoryFilterMobile: document.getElementById('categoryFilterMobile'),
-  sortFilterMobile: document.getElementById('sortFilterMobile'),
-  applyFiltersBtn: document.getElementById('applyFiltersBtn'),
-  resetFiltersMobileBtn: document.getElementById('resetFiltersMobileBtn'),
-  
-  // Toast
-  toastContainer: document.getElementById('toastContainer')
-};
+const filterDrawer = $("#filterDrawer");
+const applyFiltersBtn = $("#applyFiltersBtn");
+const resetFiltersBtnMobile = $("#resetFiltersBtnMobile");
 
-// Utility Functions
-// ===================================================
+const themeToggle = $("#themeToggle");
+const brandBtn = $("#brandBtn");
 
-const utils = {
-  debounce(fn, delay = 300) {
-    let timeout;
-    return (...args) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => fn(...args), delay);
-    };
-  },
-  
-  escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  },
-  
-  shuffle(array) {
-    const arr = [...array];
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  },
-  
-  clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-  },
-  
-  async copyToClipboard(text) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      try {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        const success = document.execCommand('copy');
-        document.body.removeChild(textarea);
-        return success;
-      } catch {
-        return false;
-      }
-    }
+const goLibraryBtn = $("#goLibraryBtn");
+
+// Modal
+const modal = $("#modal");
+const closeModalBtn = $("#closeModalBtn");
+const modalShareBtn = $("#modalShareBtn");
+const modalLoveBtn = $("#modalLoveBtn");
+const mCategory = $("#m-category");
+const mTitle = $("#m-title");
+const mAnswer = $("#m-answer");
+const mTags = $("#m-tags");
+
+// Toasts
+const toastStack = $("#toastStack");
+
+// PTR DOM
+const ptrLoader = $("#ptr-loader");
+const ptrIcon = ptrLoader ? ptrLoader.querySelector("i") : null;
+
+/* =========================
+   Helpers
+   ========================= */
+function debounce(fn, wait = 200) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
-};
+  return a;
+}
 
-// Toast Notifications
-// ===================================================
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
-function showToast(title, message) {
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.innerHTML = `
-    <div class="toast-icon">
-      <i data-lucide="check" width="16" height="16"></i>
-    </div>
-    <div class="toast-content">
-      <h4>${utils.escapeHtml(title)}</h4>
-      <p>${utils.escapeHtml(message)}</p>
+function toast(title, message) {
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.innerHTML = `
+    <div class="dot" aria-hidden="true"></div>
+    <div>
+      <p class="t-title">${escapeHtml(title)}</p>
+      <p class="t-msg">${escapeHtml(message)}</p>
     </div>
   `;
-  
-  DOM.toastContainer.appendChild(toast);
-  lucide.createIcons();
-  
+  toastStack.appendChild(el);
+
+  // auto-remove
   setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateX(100%)';
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
+    el.style.opacity = "0";
+    el.style.transform = "translateY(8px)";
+    setTimeout(() => el.remove(), 220);
+  }, 3200);
 }
 
-// Theme Management
-// ===================================================
+async function copyToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Fallback
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "absolute";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
 
+/* =========================
+   Theme
+   ========================= */
 function initTheme() {
-  const savedTheme = localStorage.getItem(STORAGE.THEME) || 'light';
-  setTheme(savedTheme, false);
+  const saved = localStorage.getItem(LS_THEME) || "light";
+  setTheme(saved, false);
 }
 
-function setTheme(theme, save = true) {
-  document.documentElement.setAttribute('data-theme', theme);
-  
-  const iconName = theme === 'dark' ? 'sun' : 'moon';
-  DOM.themeToggle.innerHTML = `<i data-lucide="${iconName}" width="20" height="20"></i>`;
-  lucide.createIcons();
-  
-  const metaTheme = document.querySelector('meta[name="theme-color"]');
-  if (metaTheme) {
-    metaTheme.content = theme === 'dark' ? '#0f172a' : '#ffffff';
-  }
-  
-  if (save) {
-    localStorage.setItem(STORAGE.THEME, theme);
-  }
+function setTheme(theme, persist = true) {
+  document.documentElement.setAttribute("data-theme", theme);
+  updateThemeIcon(theme);
+  updateMetaColor(theme);
+  if (persist) localStorage.setItem(LS_THEME, theme);
 }
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme');
-  setTheme(current === 'dark' ? 'light' : 'dark');
+  const current = document.documentElement.getAttribute("data-theme") || "dark";
+  setTheme(current === "dark" ? "light" : "dark");
 }
 
-// View Management
-// ===================================================
-
-function switchView(viewName) {
-  state.currentView = viewName;
-  localStorage.setItem(STORAGE.VIEW, viewName);
-  
-  // Update views
-  Object.entries(DOM.views).forEach(([key, view]) => {
-    view.classList.toggle('active', key === viewName);
-  });
-  
-  // Update tabs
-  DOM.tabBtns.forEach(btn => {
-    const isActive = btn.dataset.view === viewName;
-    btn.classList.toggle('active', isActive);
-  });
-  
-  // Update content
-  if (viewName === 'saved') {
-    renderSaved();
-  } else if (viewName === 'study') {
-    ensureStudyDeck();
-  }
-  
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+function updateThemeIcon(theme) {
+  const icon = $("#themeToggle i");
+  if (!icon) return;
+  icon.setAttribute("data-lucide", theme === "dark" ? "sun" : "moon");
   lucide.createIcons();
 }
 
-// Data Processing
-// ===================================================
-
-function processRowData(row, index) {
-  const question = (row[0] || 'Untitled').trim();
-  const answer = row[1] || '';
-  const category = (row[2] || 'Uncategorized').trim();
-  const tags = row[3] || '';
-  const tagsArray = tags.split(',').map(t => t.trim()).filter(Boolean);
-  
-  const snippets = [];
-  for (let i = 6; i <= 11; i++) {
-    if (row[i]) snippets.push(row[i]);
-  }
-  
-  return {
-    id: index,
-    question,
-    answer,
-    category,
-    tags,
-    tagsArray,
-    snippets,
-    searchText: `${question} ${tags} ${category}`.toLowerCase()
-  };
+function updateMetaColor(theme) {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) return;
+  meta.setAttribute("content", theme === "dark" ? "#0b1220" : "#f8fafc");
 }
 
-function getFilteredData() {
-  let filtered = state.allData.filter(item => {
-    const categoryMatch = state.filters.category === 'all' || 
-                         item.category === state.filters.category;
-    const searchMatch = !state.filters.search || 
-                       item.searchText.includes(state.filters.search.toLowerCase());
-    return categoryMatch && searchMatch;
+/* =========================
+   Views
+   ========================= */
+function switchView(viewName) {
+  const name = ["library", "saved"].includes(viewName) ? viewName : "library";
+
+  Object.entries(views).forEach(([key, el]) => {
+    el.classList.toggle("active", key === name);
   });
-  
-  // Sort
-  switch (state.filters.sort) {
-    case 'oldest':
-      filtered.sort((a, b) => a.id - b.id);
-      break;
-    case 'az':
-      filtered.sort((a, b) => a.question.localeCompare(b.question));
-      break;
-    case 'random':
-      filtered = utils.shuffle(filtered);
-      break;
-    case 'newest':
-    default:
-      filtered.sort((a, b) => b.id - a.id);
-  }
-  
-  return filtered;
+
+  tabs.forEach((btn) => {
+    const isActive = btn.dataset.view === name;
+    btn.classList.toggle("active", isActive);
+    if (isActive) btn.setAttribute("aria-current", "page");
+    else btn.removeAttribute("aria-current");
+  });
+
+  // Tools are only relevant in Library
+  if (libraryTools) libraryTools.classList.toggle("hidden", name !== "library");
+  // Filters are only relevant in Library
+  if (openFiltersBtn) openFiltersBtn.classList.toggle("hidden", name !== "library");
+
+  localStorage.setItem(LS_VIEW, name);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+
+  // Keep Saved in sync
+  if (name === "saved") renderSaved();
+
+  lucide.createIcons();
 }
 
-// Content Formatting
-// ===================================================
-
-function parseCodeSnippet(snippet) {
-  const content = snippet.replace(/^code:/i, '');
-  const pipeIndex = content.indexOf('|');
-  
-  if (pipeIndex > 0) {
-    return {
-      lang: content.slice(0, pipeIndex).trim().toLowerCase() || 'javascript',
-      code: content.slice(pipeIndex + 1)
-    };
-  }
-  
+/* =========================
+   Filters + derived data
+   ========================= */
+function getFilterState() {
   return {
-    lang: 'javascript',
-    code: content
+    search: (searchInput.value || "").trim().toLowerCase(),
+    category: catSelect.value || "all",
+    sort: sortSelect.value || "newest",
   };
 }
 
-function formatContent(text, snippets, title = 'content') {
-  if (!text) return '';
-  
+function resetPage() {
+  currentPage = 1;
+}
+
+function getFilteredItems() {
+  const { search, category, sort } = getFilterState();
+
+  // Filter
+  let items = allData.filter((item) => {
+    const matchCat = category === "all" || item.category === category;
+    const hay =
+      item.questionLower +
+      " " +
+      item.tagsLower +
+      " " +
+      (item.categoryLower || "");
+    const matchSearch = !search || hay.includes(search);
+    return matchCat && matchSearch;
+  });
+
+  // Sort
+  if (sort === "random") items = shuffle(items);
+  if (sort === "newest") items.sort((a, b) => b.id - a.id);
+  if (sort === "oldest") items.sort((a, b) => a.id - b.id);
+  if (sort === "az") items.sort((a, b) => a.question.localeCompare(b.question));
+
+  return items;
+}
+
+function syncMobileFiltersFromDesktop() {
+  if (sortSelectMobile) sortSelectMobile.value = sortSelect.value;
+  if (catSelectMobile) catSelectMobile.value = catSelect.value;
+}
+
+function resetFilters() {
+  searchInput.value = "";
+  sortSelect.value = "newest";
+  catSelect.value = "all";
+  syncMobileFiltersFromDesktop();
+  resetPage();
+  renderLibrary();
+  toast("Reset", "Filters cleared.");
+}
+
+/* =========================
+   Rendering: Library
+   ========================= */
+function populateCategories() {
+  const categories = [...new Set(allData.map((d) => d.category))].sort((a, b) =>
+    a.localeCompare(b)
+  );
+
+  const fill = (selectEl) => {
+    if (!selectEl) return;
+    selectEl.innerHTML = '<option value="all">All categories</option>';
+    categories.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c;
+      opt.textContent = c;
+      selectEl.appendChild(opt);
+    });
+  };
+
+  fill(catSelect);
+  fill(catSelectMobile);
+}
+
+function createLibraryCard(item) {
+  const card = document.createElement("article");
+  card.className = "card";
+  card.dataset.id = String(item.id);
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-label", `Open: ${item.question}`);
+
+  const chips = item.tagsArr.slice(0, 3).map((t) => `<span class="chip">${escapeHtml(t)}</span>`).join("");
+
+  const isSaved = favorites.has(item.id);
+
+  card.innerHTML = `
+    <div class="card-top">
+      <div class="kicker">${escapeHtml(item.category)}</div>
+
+      <button class="save-btn ${isSaved ? "saved" : ""}" type="button" aria-label="${isSaved ? "Remove from saved" : "Save"}">
+        <i data-lucide="heart" width="18" height="18"></i>
+      </button>
+    </div>
+
+    <div class="title">${escapeHtml(item.question)}</div>
+
+    <div class="tags-row">${chips}</div>
+  `;
+
+  const saveBtn = card.querySelector(".save-btn");
+  saveBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleFavorite(item.id);
+  });
+
+  card.addEventListener("click", () => openModal(item));
+  card.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openModal(item);
+    }
+  });
+
+  return card;
+}
+
+function buildLibraryCards() {
+  grid.innerHTML = "";
+  cardElements.clear();
+
+  allData.forEach((item) => {
+    const card = createLibraryCard(item);
+    cardElements.set(item.id, card);
+  });
+}
+
+function updateResultMeta({ totalItems, start, end, totalPages }) {
+  const { search, category } = getFilterState();
+
+  const bits = [];
+
+  if (totalItems === 0) {
+    bits.push("0 items");
+  } else if (totalItems <= ITEMS_PER_PAGE) {
+    bits.push(`${totalItems} item${totalItems === 1 ? "" : "s"}`);
+  } else {
+    bits.push(`Showing ${start}–${end} of ${totalItems} items`);
+  }
+
+  if (totalPages > 1) bits.push(`• Page ${currentPage} of ${totalPages}`);
+  if (category !== "all") bits.push(`• in “${category}”`);
+  if (search) bits.push(`• matching “${search}”`);
+
+  resultMeta.textContent = bits.join(" ");
+}
+
+function setPage(nextPage) {
+  currentPage = clamp(nextPage, 1, lastTotalPages);
+  renderLibrary({ keepScroll: false });
+}
+
+function renderPagination(totalPages) {
+  if (!pagination) return;
+
+  if (totalPages <= 1) {
+    pagination.classList.add("hidden");
+    pagination.innerHTML = "";
+    return;
+  }
+
+  pagination.classList.remove("hidden");
+  pagination.innerHTML = "";
+
+  const groupStart = Math.floor((currentPage - 1) / PAGE_WINDOW) * PAGE_WINDOW + 1;
+  const groupEnd = Math.min(groupStart + PAGE_WINDOW - 1, totalPages);
+
+  const mkBtn = ({ label, page, active = false, disabled = false, ariaLabel = null, kind = "num" }) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `page-btn ${kind} ${active ? "active" : ""}`.trim();
+    b.textContent = label;
+    if (ariaLabel) b.setAttribute("aria-label", ariaLabel);
+    if (disabled) {
+      b.disabled = true;
+      b.setAttribute("aria-disabled", "true");
+    } else if (typeof page === "number") {
+      b.addEventListener("click", () => setPage(page));
+    }
+    return b;
+  };
+
+  // Prev (hidden on first page to match “1 2 3 4 5 > …” style)
+  if (currentPage > 1) {
+    pagination.appendChild(
+      mkBtn({
+        label: "<",
+        page: currentPage - 1,
+        kind: "nav",
+        ariaLabel: "Previous page",
+      })
+    );
+  }
+
+  // Page numbers (5 at a time)
+  for (let p = groupStart; p <= groupEnd; p++) {
+    pagination.appendChild(
+      mkBtn({
+        label: String(p),
+        page: p,
+        active: p === currentPage,
+        ariaLabel: p === currentPage ? `Page ${p}, current page` : `Go to page ${p}`,
+      })
+    );
+  }
+
+  // Next
+  pagination.appendChild(
+    mkBtn({
+      label: ">",
+      page: currentPage + 1,
+      disabled: currentPage >= totalPages,
+      kind: "nav",
+      ariaLabel: "Next page",
+    })
+  );
+
+  // Ellipsis indicator when there are more pages beyond the current window
+  if (groupEnd < totalPages) {
+    const dots = document.createElement("span");
+    dots.className = "page-ellipsis";
+    dots.textContent = "…";
+    dots.setAttribute("aria-hidden", "true");
+    pagination.appendChild(dots);
+  }
+}
+
+function renderLibrary({ keepScroll = true } = {}) {
+  if (!allData.length) return;
+
+  // Clear button visibility
+  clearSearchBtn.classList.toggle("hidden", !(searchInput.value || "").trim());
+
+  const items = getFilteredItems();
+  const totalItems = items.length;
+
+  lastTotalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
+  currentPage = clamp(currentPage, 1, lastTotalPages);
+
+  const start = totalItems === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const end = totalItems === 0 ? 0 : Math.min(currentPage * ITEMS_PER_PAGE, totalItems);
+  const pageItems = totalItems ? items.slice(start - 1, end) : [];
+
+  updateResultMeta({ totalItems, start, end, totalPages: lastTotalPages });
+
+  // Hide all, then append current page (cheap and stable)
+  cardElements.forEach((el) => el.classList.add("hidden"));
+
+  if (totalItems === 0) {
+    emptyState.classList.remove("hidden");
+    renderPagination(0);
+    return;
+  }
+
+  emptyState.classList.add("hidden");
+
+  pageItems.forEach((item) => {
+    const el = cardElements.get(item.id);
+    if (!el) return;
+    el.classList.remove("hidden");
+    grid.appendChild(el);
+  });
+
+  renderPagination(lastTotalPages);
+
+  lucide.createIcons();
+
+  if (!keepScroll) {
+    // Smoothly keep the grid in view when paging.
+    try {
+      grid.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+}
+
+/* =========================
+   Saved
+   ========================= */
+function createSavedCard(item) {
+  const card = createLibraryCard(item);
+  // In saved grid, card elements are new nodes; saving/un-saving re-renders anyway.
+  return card;
+}
+
+function renderSaved() {
+  if (!allData.length) return;
+
+  favGrid.innerHTML = "";
+
+  const items = allData.filter((d) => favorites.has(d.id));
+
+  savedEmpty.classList.toggle("hidden", items.length !== 0);
+
+  if (!items.length) return;
+
+  items.forEach((item) => {
+    favGrid.appendChild(createSavedCard(item));
+  });
+
+  lucide.createIcons();
+}
+
+/* =========================
+   Favorites logic
+   ========================= */
+function persistFavorites() {
+  localStorage.setItem(LS_FAVS, JSON.stringify([...favorites]));
+}
+
+function setSavedUIState(id) {
+  const libCard = cardElements.get(id);
+  if (libCard) {
+    const btn = libCard.querySelector(".save-btn");
+    const saved = favorites.has(id);
+    btn.classList.toggle("saved", saved);
+    btn.setAttribute("aria-label", saved ? "Remove from saved" : "Save");
+  }
+
+  // Modal
+  if (currentModalId === id) {
+    modalLoveBtn.classList.toggle("saved", favorites.has(id));
+    modalLoveBtn.setAttribute("aria-label", favorites.has(id) ? "Remove from saved" : "Save");
+  }
+}
+
+function toggleFavorite(id) {
+  const wasSaved = favorites.has(id);
+  if (wasSaved) favorites.delete(id);
+  else favorites.add(id);
+
+  persistFavorites();
+  setSavedUIState(id);
+
+  // Re-render saved view if needed
+  if (views.saved.classList.contains("active")) renderSaved();
+
+  toast(wasSaved ? "Removed" : "Saved", wasSaved ? "Removed from Saved." : "Added to Saved.");
+}
+
+/* =========================
+   Modal + deep linking
+   ========================= */
+function checkHashForModal() {
+  const hash = window.location.hash || "";
+  if (!hash.startsWith("#question-")) return;
+
+  const id = parseInt(hash.replace("#question-", ""), 10);
+  if (Number.isNaN(id)) return;
+
+  const item = allData.find((d) => d.id === id);
+  if (item) openModal(item, { fromHash: true });
+}
+
+function openModal(item, { fromHash = false } = {}) {
+  currentModalId = item.id;
+  lastFocusedElement = document.activeElement;
+
+  // Update hash (unless already from hash)
+  if (!fromHash) window.location.hash = `question-${item.id}`;
+
+  mCategory.textContent = item.category;
+  mTitle.textContent = item.question;
+  mAnswer.innerHTML = formatContent(item.answer, item.snippets, item.question);
+
+  // Tags (clickable)
+  mTags.innerHTML = "";
+  item.tagsArr.forEach((t) => {
+    const btn = document.createElement("button");
+    btn.className = "tag-btn";
+    btn.type = "button";
+    btn.textContent = t;
+    btn.addEventListener("click", () => applyTagFilter(t));
+    mTags.appendChild(btn);
+  });
+
+  // Save state
+  modalLoveBtn.classList.toggle("saved", favorites.has(item.id));
+  modalLoveBtn.setAttribute("aria-label", favorites.has(item.id) ? "Remove from saved" : "Save");
+
+  // Show
+  modal.classList.add("active");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+
+  // Focus
+  closeModalBtn.focus();
+
+  lucide.createIcons();
+  Prism.highlightAllUnder(modal);
+}
+
+function closeModal({ keepHash = false } = {}) {
+  modal.classList.remove("active");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
+
+  currentModalId = null;
+
+  if (!keepHash) {
+    // Remove hash without forcing a scroll jump
+    history.pushState("", document.title, window.location.pathname + window.location.search);
+  }
+
+  if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
+    lastFocusedElement.focus();
+  }
+}
+
+function applyTagFilter(tag) {
+  // Switch to library, search for the tag
+  closeModal();
+  switchView("library");
+  searchInput.value = tag;
+  resetPage();
+  renderLibrary();
+  toast("Filter", `Searching for “${tag}”.`);
+}
+
+/* =========================
+   Content formatting (safe)
+   ========================= */
+function parseCodeSnippet(snippet) {
+  // Supported:
+  // code:<code>
+  // code:js|<code>
+  // code:python|<code>
+  const raw = snippet.replace(/^code:/i, "");
+  const pipeIndex = raw.indexOf("|");
+  if (pipeIndex > 0) {
+    const lang = raw.slice(0, pipeIndex).trim().toLowerCase();
+    const code = raw.slice(pipeIndex + 1);
+    return { lang: lang || "swift", code };
+  }
+  return { lang: "swift", code: raw };
+}
+
+function formatContent(text, snippets, titleForAlt = "image") {
+  if (!text) return "";
+
   const blocks = [];
-  
-  // Replace snippet placeholders
-  let processed = text.replace(/\[(image|code|img)[_\s]?(\d+)\]/gi, (match, type, num) => {
-    const index = parseInt(num) - 1;
-    if (index < 0 || index >= snippets.length) return '';
-    
-    const snippet = snippets[index].trim();
-    if (!snippet) return '';
-    
-    let html = '';
-    
-    if (snippet.toLowerCase().startsWith('code:')) {
+
+  // Replace placeholders with block tokens that become their own paragraph
+  let raw = String(text).replace(/\[(image|code|img)[_\s]?(\d+)\]/gi, (_m, _type, num) => {
+    const idx = parseInt(num, 10) - 1;
+    if (Number.isNaN(idx) || idx < 0 || idx >= snippets.length) return "";
+
+    const snippet = String(snippets[idx] || "").trim();
+    if (!snippet) return "";
+
+    let html = "";
+    if (snippet.toLowerCase().startsWith("code:")) {
       const { lang, code } = parseCodeSnippet(snippet);
+      const safeCode = escapeHtml(code);
       html = `
-        <div class="code-wrapper">
-          <pre><code class="language-${utils.escapeHtml(lang)}">${utils.escapeHtml(code)}</code></pre>
+        <div class="code-wrap">
+          <button class="copy-btn" type="button" data-copy="${encodeURIComponent(code)}">Copy</button>
+          <pre><code class="language-${escapeHtml(lang)}">${safeCode}</code></pre>
         </div>
       `;
-    } else if (snippet.toLowerCase().startsWith('image:')) {
-      const url = snippet.replace(/^image:/i, '').trim();
-      html = `<img src="${utils.escapeHtml(url)}" alt="${utils.escapeHtml(title)}" loading="lazy">`;
+    } else if (snippet.toLowerCase().startsWith("image:")) {
+      const url = snippet.replace(/^image:/i, "").trim();
+      html = `<img class="rendered-img" src="${escapeHtml(url)}" alt="Illustration for ${escapeHtml(titleForAlt)}">`;
     } else {
-      html = `<div class="snippet-box">${utils.escapeHtml(snippet)}</div>`;
+      html = `<div class="snippet-box">${escapeHtml(snippet)}</div>`;
     }
-    
+
     const token = `@@BLOCK_${blocks.length}@@`;
     blocks.push(html);
     return `\n\n${token}\n\n`;
   });
-  
-  // Escape HTML
-  processed = utils.escapeHtml(processed);
-  
-  // Process bold
-  processed = processed.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  
-  // Split into paragraphs
-  const paragraphs = processed.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
-  
-  return paragraphs.map(p => {
-    const blockMatch = p.match(/^@@BLOCK_(\d+)@@$/);
-    if (blockMatch) {
-      return blocks[parseInt(blockMatch[1])];
+
+  // Escape remaining text to prevent injection
+  raw = escapeHtml(raw);
+
+  // Bold: **text**
+  raw = raw.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+  // Split into paragraphs by blank lines
+  const parts = raw.split(/\n\s*\n/g).map((p) => p.trim()).filter(Boolean);
+
+  const htmlOut = parts.map((p) => {
+    const m = p.match(/^@@BLOCK_(\d+)@@$/);
+    if (m) {
+      const idx = parseInt(m[1], 10);
+      return blocks[idx] || "";
     }
-    const withBreaks = p.replace(/\n/g, '<br>');
+    // Convert single newlines to <br>
+    const withBreaks = p.replace(/\n/g, "<br>");
     return `<p>${withBreaks}</p>`;
-  }).join('');
+  }).join("");
+
+  return htmlOut;
 }
 
-// Card Rendering
-// ===================================================
+/* Code copy handling via event delegation */
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".copy-btn");
+  if (!btn) return;
 
-function createCard(item) {
-  const card = document.createElement('article');
-  card.className = 'card';
-  card.dataset.id = item.id;
-  card.onclick = () => openModal(item);
-  
-  const isBookmarked = state.bookmarks.has(item.id);
-  
-  card.innerHTML = `
-    <div class="card-header">
-      <span class="card-category">${utils.escapeHtml(item.category)}</span>
-      <button class="bookmark-btn ${isBookmarked ? 'saved' : ''}" 
-              onclick="event.stopPropagation(); toggleBookmark(${item.id})"
-              aria-label="${isBookmarked ? 'Remove bookmark' : 'Add bookmark'}">
-        <i data-lucide="bookmark" width="18" height="18"></i>
-      </button>
-    </div>
-    <h3 class="card-title">${utils.escapeHtml(item.question)}</h3>
-    <div class="card-tags">
-      ${item.tagsArray.slice(0, 3).map(tag => 
-        `<span class="tag">${utils.escapeHtml(tag)}</span>`
-      ).join('')}
-    </div>
-  `;
-  
-  return card;
-}
+  const text = decodeURIComponent(btn.getAttribute("data-copy") || "");
+  const ok = await copyToClipboard(text);
 
-// Library Rendering
-// ===================================================
+  toast(ok ? "Copied" : "Copy failed", ok ? "Code copied to clipboard." : "Your browser blocked clipboard access.");
+});
 
-function populateCategories() {
-  const categories = [...new Set(state.allData.map(item => item.category))]
-    .sort((a, b) => a.localeCompare(b));
-  
-  [DOM.categoryFilter, DOM.categoryFilterMobile].forEach(select => {
-    select.innerHTML = '<option value="all">All Categories</option>';
-    categories.forEach(cat => {
-      const option = document.createElement('option');
-      option.value = cat;
-      option.textContent = cat;
-      select.appendChild(option);
-    });
-  });
-}
+/* =========================
+   Data fetching
+   ========================= */
+async function fetchData() {
+  initTheme();
 
-function renderLibrary() {
-  const filtered = getFilteredData();
-  const total = filtered.length;
-  
-  // Calculate pagination
-  state.totalPages = Math.max(1, Math.ceil(total / CONFIG.ITEMS_PER_PAGE));
-  state.currentPage = utils.clamp(state.currentPage, 1, state.totalPages);
-  
-  const start = (state.currentPage - 1) * CONFIG.ITEMS_PER_PAGE;
-  const end = Math.min(start + CONFIG.ITEMS_PER_PAGE, total);
-  const pageItems = filtered.slice(start, end);
-  
-  // Update meta
-  updateResultsMeta(total, start + 1, end);
-  
-  // Clear grid
-  DOM.cardsGrid.innerHTML = '';
-  
-  // Show/hide empty state
-  DOM.emptyState.classList.toggle('hidden', total > 0);
-  
-  if (total > 0) {
-    pageItems.forEach(item => {
-      DOM.cardsGrid.appendChild(createCard(item));
-    });
-  }
-  
-  // Render pagination
-  renderPagination();
-  
-  // Update clear button
-  DOM.clearSearchBtn.classList.toggle('hidden', !state.filters.search);
-  
-  lucide.createIcons();
-}
+  try {
+    const res = await fetch(API_URL);
+    const json = await res.json();
 
-function updateResultsMeta(total, start, end) {
-  let text = '';
-  
-  if (total === 0) {
-    text = 'No results';
-  } else if (total <= CONFIG.ITEMS_PER_PAGE) {
-    text = `${total} item${total === 1 ? '' : 's'}`;
-  } else {
-    text = `Showing ${start}–${end} of ${total} items`;
-  }
-  
-  const filters = [];
-  if (state.filters.category !== 'all') {
-    filters.push(`in "${state.filters.category}"`);
-  }
-  if (state.filters.search) {
-    filters.push(`matching "${state.filters.search}"`);
-  }
-  
-  if (filters.length) {
-    text += ' • ' + filters.join(' • ');
-  }
-  
-  DOM.resultsMeta.textContent = text;
-}
+    // Remove skeleton
+    if (skeleton) skeleton.remove();
 
-function renderPagination() {
-  DOM.pagination.innerHTML = '';
-  
-  if (state.totalPages <= 1) {
-    DOM.pagination.classList.add('hidden');
-    return;
-  }
-  
-  DOM.pagination.classList.remove('hidden');
-  
-  // Previous button
-  if (state.currentPage > 1) {
-    const prev = createPageButton('‹', state.currentPage - 1, 'Previous page');
-    DOM.pagination.appendChild(prev);
-  }
-  
-  // Page numbers
-  const groupStart = Math.floor((state.currentPage - 1) / CONFIG.PAGE_WINDOW) * CONFIG.PAGE_WINDOW + 1;
-  const groupEnd = Math.min(groupStart + CONFIG.PAGE_WINDOW - 1, state.totalPages);
-  
-  for (let i = groupStart; i <= groupEnd; i++) {
-    const btn = createPageButton(i, i, `Page ${i}`);
-    if (i === state.currentPage) {
-      btn.classList.add('active');
+    if (!json.values || !Array.isArray(json.values)) {
+      emptyState.classList.remove("hidden");
+      resultMeta.textContent = "0 items";
+      resetPTR();
+      return;
     }
-    DOM.pagination.appendChild(btn);
-  }
-  
-  // Next button
-  const next = createPageButton('›', state.currentPage + 1, 'Next page');
-  if (state.currentPage >= state.totalPages) {
-    next.disabled = true;
-  }
-  DOM.pagination.appendChild(next);
-  
-  // Ellipsis
-  if (groupEnd < state.totalPages) {
-    const ellipsis = document.createElement('span');
-    ellipsis.className = 'page-ellipsis';
-    ellipsis.textContent = '…';
-    DOM.pagination.appendChild(ellipsis);
-  }
-}
 
-function createPageButton(label, page, ariaLabel) {
-  const btn = document.createElement('button');
-  btn.className = 'page-btn';
-  btn.textContent = label;
-  btn.setAttribute('aria-label', ariaLabel);
-  btn.onclick = () => {
-    state.currentPage = page;
+    const rows = json.values.filter((row) => row[0] && String(row[0]).trim() !== "");
+
+    allData = rows.map((row, i) => {
+      const question = String(row[0] || "Untitled").trim();
+      const answer = String(row[1] || "");
+      const category = String(row[2] || "Uncategorized").trim() || "Uncategorized";
+      const tags = String(row[3] || "");
+      const tagsArr = tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+
+      const snippets = [];
+      for (let c = 6; c <= 11; c++) {
+        if (row[c]) snippets.push(String(row[c]));
+      }
+
+      return {
+        id: i,
+        question,
+        answer,
+        category,
+        tags,
+        tagsArr,
+        snippets,
+        questionLower: question.toLowerCase(),
+        tagsLower: tags.toLowerCase(),
+        categoryLower: category.toLowerCase(),
+      };
+    });
+
+    populateCategories();
+    buildLibraryCards();
+    syncMobileFiltersFromDesktop();
+
+    // Initial view
+    const savedView = localStorage.getItem(LS_VIEW) || "library";
+    switchView(savedView);
+
+    // Initial render(s)
     renderLibrary();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  return btn;
-}
-
-// Saved View
-// ===================================================
-
-function renderSaved() {
-  const saved = state.allData.filter(item => state.bookmarks.has(item.id));
-  
-  DOM.savedGrid.innerHTML = '';
-  DOM.savedEmpty.classList.toggle('hidden', saved.length > 0);
-  
-  saved.forEach(item => {
-    DOM.savedGrid.appendChild(createCard(item));
-  });
-  
-  lucide.createIcons();
-}
-
-// Bookmark Management
-// ===================================================
-
-function toggleBookmark(id) {
-  if (state.bookmarks.has(id)) {
-    state.bookmarks.delete(id);
-    showToast('Removed', 'Bookmark removed');
-  } else {
-    state.bookmarks.add(id);
-    showToast('Saved', 'Added to bookmarks');
-  }
-  
-  localStorage.setItem(STORAGE.BOOKMARKS, JSON.stringify([...state.bookmarks]));
-  
-  // Update UI
-  if (state.currentView === 'library') {
-    renderLibrary();
-  } else if (state.currentView === 'saved') {
     renderSaved();
-  }
-  
-  // Update modal if open
-  if (state.currentModalId === id) {
-    updateModalBookmarkButton();
-  }
-  
-  // Update study deck if needed
-  if (state.currentView === 'study' && state.study.deckType === 'saved') {
-    startStudy('saved');
-  }
-}
 
-// Modal
-// ===================================================
+    // Deep link
+    checkHashForModal();
 
-function openModal(item) {
-  state.currentModalId = item.id;
-  
-  DOM.modalCategory.textContent = item.category;
-  DOM.modalTitle.textContent = item.question;
-  DOM.modalAnswer.innerHTML = formatContent(item.answer, item.snippets, item.question);
-  
-  // Tags
-  DOM.modalTags.innerHTML = item.tagsArray.map(tag => 
-    `<button class="tag-btn" onclick="searchByTag('${utils.escapeHtml(tag)}')">${utils.escapeHtml(tag)}</button>`
-  ).join('');
-  
-  updateModalBookmarkButton();
-  
-  DOM.modal.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-
-  // FIX: Reset modal scroll position to top
-  const modalBody = DOM.modal.querySelector('.modal-body');
-  if (modalBody) {
-    modalBody.scrollTop = 0;
-  }
-  
-  lucide.createIcons();
-  Prism.highlightAllUnder(DOM.modal);
-  
-  // Update hash
-  window.location.hash = `question-${item.id}`;
-}
-
-function closeModal() {
-  DOM.modal.classList.add('hidden');
-  document.body.style.overflow = '';
-  state.currentModalId = null;
-  
-  // Remove hash
-  history.pushState('', document.title, window.location.pathname);
-}
-
-function updateModalBookmarkButton() {
-  const isBookmarked = state.bookmarks.has(state.currentModalId);
-  DOM.modalBookmarkBtn.classList.toggle('saved', isBookmarked);
-  DOM.modalBookmarkBtn.setAttribute('aria-label', 
-    isBookmarked ? 'Remove bookmark' : 'Add bookmark');
-}
-
-function searchByTag(tag) {
-  closeModal();
-  switchView('library');
-  state.filters.search = tag;
-  DOM.searchInput.value = tag;
-  state.currentPage = 1;
-  renderLibrary();
-  showToast('Search', `Filtering by "${tag}"`);
-}
-
-// === NEW SHARE FUNCTION (Native iOS/Android support) ===
-async function shareCard() {
-  const url = window.location.href;
-  const title = DOM.modalTitle.textContent || 'KnowledgeOcean';
-  const text = DOM.modalCategory.textContent 
-    ? `Check out this card about ${DOM.modalCategory.textContent}` 
-    : 'Check this out!';
-
-  // Use native share if available (iOS/Android/Safari/Edge)
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: title,
-        text: text,
-        url: url
-      });
-    } catch (err) {
-      // User cancelled or share failed, log silently
-      console.log('Share cancelled or failed:', err);
+    if (isRefreshing) {
+      toast("Refreshed", "Content updated from Google Sheets.");
     }
-  } else {
-    // Fallback for Desktop Chrome/Firefox (Copy Link)
-    const success = await utils.copyToClipboard(url);
-    if (success) {
-      showToast('Copied', 'Link copied to clipboard');
+
+  } catch (err) {
+    console.error(err);
+    if (skeleton) skeleton.remove();
+    emptyState.classList.remove("hidden");
+    resultMeta.textContent = "Error loading data";
+    toast("Error", "Could not load Google Sheets data. Check API key / Sheet ID.");
+  } finally {
+    resetPTR();
+  }
+}
+
+/* =========================
+   Pull to Refresh Logic
+   ========================= */
+function initPullToRefresh() {
+  if (!ptrLoader) return;
+
+  const app = document.getElementById("app") || document.body;
+
+  app.addEventListener("touchstart", (e) => {
+    if (window.scrollY === 0) {
+      ptrStartY = e.touches[0].clientY;
+      ptrDist = 0;
+    }
+  }, { passive: true });
+
+  app.addEventListener("touchmove", (e) => {
+    if (window.scrollY > 0 || isRefreshing) return;
+
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - ptrStartY;
+
+    if (diff > 0) {
+      // Add resistance
+      ptrDist = Math.pow(diff, 0.8);
+      ptrLoader.style.opacity = Math.min(1, ptrDist / PTR_THRESHOLD);
+      ptrLoader.style.transform = `translateY(${Math.min(ptrDist / 2, 40)}px) scale(${Math.min(1, ptrDist / PTR_THRESHOLD)})`;
+
+      if (ptrIcon) {
+        ptrIcon.style.transform = `rotate(${ptrDist * 3}deg)`;
+      }
+    }
+  }, { passive: true });
+
+  app.addEventListener("touchend", () => {
+    if (window.scrollY > 0 || isRefreshing) return;
+
+    if (ptrDist > PTR_THRESHOLD) {
+      isRefreshing = true;
+      ptrLoader.classList.add("visible");
+      ptrLoader.style.transform = "translateY(0) scale(1)";
+      // Keep loader visible
+      fetchData();
     } else {
-      showToast('Error', 'Could not copy link');
+      resetPTR();
     }
-  }
-}
-
-// Study Mode
-// ===================================================
-
-function ensureStudyDeck() {
-  const savedCount = state.bookmarks.size;
-  const filteredCount = getFilteredData().length;
-  
-  if (state.study.deckType === 'saved' && savedCount === 0) {
-    state.study.deckType = filteredCount > 0 ? 'filtered' : 'all';
-  }
-  
-  startStudy(state.study.deckType);
-}
-
-function startStudy(deckType) {
-  state.study.deckType = deckType;
-  state.study.revealed = false;
-  
-  // Update deck buttons
-  DOM.deckBtns.forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.deck === deckType);
   });
-  
-  // Build deck
-  let deck = [];
-  if (deckType === 'saved') {
-    deck = state.allData.filter(item => state.bookmarks.has(item.id));
-  } else if (deckType === 'filtered') {
-    deck = getFilteredData();
-  } else {
-    deck = [...state.allData];
-  }
-  
-  state.study.deck = deck;
-  state.study.currentIndex = utils.clamp(state.study.currentIndex, 0, deck.length - 1);
-  
-  renderStudyCard();
 }
 
-function renderStudyCard() {
-  const { deck, currentIndex, revealed } = state.study;
-  
-  // Show/hide empty state
-  const hasCards = deck.length > 0;
-  DOM.studyEmpty.classList.toggle('hidden', hasCards);
-  DOM.flashcard.classList.toggle('hidden', !hasCards);
-  DOM.prevCardBtn.parentElement.classList.toggle('hidden', !hasCards);
-  
-  if (!hasCards) {
-    updateStudyProgress(0, 0, 0);
-    return;
-  }
-  
-  const card = deck[currentIndex];
-  
-  // Update progress
-  updateStudyProgress(currentIndex + 1, deck.length, ((currentIndex + 1) / deck.length) * 100);
-  
-  // Update card content
-  DOM.cardCategory.textContent = card.category;
-  DOM.cardQuestion.textContent = card.question;
-  DOM.cardTags.innerHTML = card.tagsArray.slice(0, 5).map(tag => 
-    `<span class="tag">${utils.escapeHtml(tag)}</span>`
-  ).join('');
-  
-  DOM.cardAnswer.innerHTML = formatContent(card.answer, card.snippets, card.question);
-  
-  // Show/hide answer
-  DOM.cardBack.classList.toggle('hidden', !revealed);
-  
-  // Update reveal button
-  DOM.revealBtn.innerHTML = revealed
-    ? '<i data-lucide="eye-off" width="18" height="18"></i><span>Hide Answer</span>'
-    : '<i data-lucide="eye" width="18" height="18"></i><span>Reveal Answer</span>';
-  
-  lucide.createIcons();
-  if (revealed) {
-    Prism.highlightAllUnder(DOM.cardBack);
+function resetPTR() {
+  isRefreshing = false;
+  ptrDist = 0;
+  if (ptrLoader) {
+    ptrLoader.style.opacity = "0";
+    ptrLoader.style.transform = "translateY(-20px) scale(0.9)";
+    ptrLoader.classList.remove("visible");
+    if (ptrIcon) ptrIcon.style.transform = "rotate(0deg)";
   }
 }
 
-function updateStudyProgress(current, total, percentage) {
-  DOM.studyProgress.querySelector('.current').textContent = current;
-  DOM.studyProgress.querySelector('.total').textContent = total;
-  DOM.studyProgress.querySelector('.progress-fill').style.width = `${percentage}%`;
-}
-
-function revealAnswer() {
-  state.study.revealed = !state.study.revealed;
-  renderStudyCard();
-}
-
-function nextCard() {
-  const { deck, currentIndex } = state.study;
-  if (deck.length === 0) return;
-  
-  state.study.currentIndex = (currentIndex + 1) % deck.length;
-  state.study.revealed = false;
-  renderStudyCard();
-}
-
-function prevCard() {
-  const { deck, currentIndex } = state.study;
-  if (deck.length === 0) return;
-  
-  state.study.currentIndex = (currentIndex - 1 + deck.length) % deck.length;
-  state.study.revealed = false;
-  renderStudyCard();
-}
-
-function shuffleDeck() {
-  if (state.study.deck.length === 0) return;
-  
-  const currentId = state.study.deck[state.study.currentIndex]?.id;
-  state.study.deck = utils.shuffle(state.study.deck);
-  
-  if (currentId !== undefined) {
-    const newIndex = state.study.deck.findIndex(item => item.id === currentId);
-    state.study.currentIndex = newIndex >= 0 ? newIndex : 0;
-  }
-  
-  state.study.revealed = false;
-  renderStudyCard();
-  showToast('Shuffled', 'Deck order randomized');
-}
-
-function restartDeck() {
-  state.study.currentIndex = 0;
-  state.study.revealed = false;
-  renderStudyCard();
-  showToast('Restarted', 'Back to first card');
-}
-
-function showCurrentCardDetails() {
-  if (state.study.deck.length === 0) return;
-  const card = state.study.deck[state.study.currentIndex];
-  openModal(card);
-}
-
-// Drawer (Mobile Filters)
-// ===================================================
-
+/* =========================
+   Drawer controls
+   ========================= */
 function openDrawer() {
-  DOM.drawer.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-  
-  // Sync values
-  DOM.categoryFilterMobile.value = state.filters.category;
-  DOM.sortFilterMobile.value = state.filters.sort;
+  filterDrawer.classList.add("active");
+  filterDrawer.setAttribute("aria-hidden", "false");
+  document.body.style.overflow = "hidden";
+  // Ensure current values
+  syncMobileFiltersFromDesktop();
+  if (sortSelectMobile) sortSelectMobile.focus();
 }
 
 function closeDrawer() {
-  DOM.drawer.classList.add('hidden');
-  document.body.style.overflow = '';
+  filterDrawer.classList.remove("active");
+  filterDrawer.setAttribute("aria-hidden", "true");
+  document.body.style.overflow = "";
 }
 
-function applyMobileFilters() {
-  state.filters.category = DOM.categoryFilterMobile.value;
-  state.filters.sort = DOM.sortFilterMobile.value;
-  
-  // Sync with desktop
-  DOM.categoryFilter.value = state.filters.category;
-  DOM.sortFilter.value = state.filters.sort;
-  
-  state.currentPage = 1;
+/* =========================
+   Events
+   ========================= */
+// Tabs
+tabs.forEach((btn) => {
+  btn.addEventListener("click", () => switchView(btn.dataset.view));
+});
+
+// Theme
+themeToggle.addEventListener("click", toggleTheme);
+
+// Brand scroll
+brandBtn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+
+// Search
+searchInput.addEventListener(
+  "input",
+  debounce(() => {
+    resetPage();
+    renderLibrary();
+  }, 180)
+);
+clearSearchBtn.addEventListener("click", () => {
+  searchInput.value = "";
+  searchInput.focus();
+  resetPage();
   renderLibrary();
+});
+resetFiltersBtn.addEventListener("click", resetFilters);
+
+// Desktop filters
+sortSelect.addEventListener("change", () => {
+  syncMobileFiltersFromDesktop();
+  resetPage();
+  renderLibrary();
+});
+catSelect.addEventListener("change", () => {
+  syncMobileFiltersFromDesktop();
+  resetPage();
+  renderLibrary();
+});
+
+// Keyboard shortcut: "/" to focus search (Library only)
+document.addEventListener("keydown", (e) => {
+  const isTyping =
+    e.target instanceof HTMLInputElement ||
+    e.target instanceof HTMLTextAreaElement ||
+    e.target instanceof HTMLSelectElement;
+
+  if (!isTyping && e.key === "/") {
+    if (views.library.classList.contains("active")) {
+      e.preventDefault();
+      searchInput.focus();
+    }
+  }
+
+  // ESC handling
+  if (e.key === "Escape") {
+    if (modal.classList.contains("active")) {
+      closeModal();
+      return;
+    }
+    if (filterDrawer.classList.contains("active")) {
+      closeDrawer();
+      return;
+    }
+  }
+});
+
+// Mobile filter drawer
+openFiltersBtn.addEventListener("click", () => openDrawer());
+
+filterDrawer.addEventListener("click", (e) => {
+  const shouldClose = e.target && (e.target.dataset.closeDrawer === "true");
+  if (shouldClose) closeDrawer();
+});
+
+// Mobile selects: live sync
+if (sortSelectMobile) {
+  sortSelectMobile.addEventListener("change", () => {
+    sortSelect.value = sortSelectMobile.value;
+    resetPage();
+    renderLibrary();
+  });
+}
+if (catSelectMobile) {
+  catSelectMobile.addEventListener("change", () => {
+    catSelect.value = catSelectMobile.value;
+    resetPage();
+    renderLibrary();
+  });
+}
+
+applyFiltersBtn.addEventListener("click", () => closeDrawer());
+resetFiltersBtnMobile.addEventListener("click", () => {
+  resetFilters();
   closeDrawer();
-}
+});
 
-function resetFilters() {
-  state.filters = {
-    search: '',
-    category: 'all',
-    sort: 'newest'
-  };
-  
-  DOM.searchInput.value = '';
-  DOM.categoryFilter.value = 'all';
-  DOM.sortFilter.value = 'newest';
-  DOM.categoryFilterMobile.value = 'all';
-  DOM.sortFilterMobile.value = 'newest';
-  
-  state.currentPage = 1;
-  renderLibrary();
-  
-  showToast('Reset', 'All filters cleared');
-}
+// Modal close
+modal.addEventListener("click", (e) => {
+  const shouldClose = e.target && (e.target.dataset.closeModal === "true");
+  if (shouldClose) closeModal();
+});
+closeModalBtn.addEventListener("click", () => closeModal());
 
-// Data Loading
-// ===================================================
+// Share
+modalShareBtn.addEventListener("click", async () => {
+  const url = window.location.href;
+  const title = mTitle.textContent || "KnowledgeOcean";
 
-async function loadData() {
-  try {
-    const response = await fetch(CONFIG.API_URL);
-    const data = await response.json();
-    
-    if (!data.values || !Array.isArray(data.values)) {
-      throw new Error('Invalid data format');
-    }
-    
-    const rows = data.values.filter(row => row[0] && row[0].trim());
-    state.allData = rows.map(processRowData);
-    
-    populateCategories();
-    
-    // Initial render
-    const savedView = localStorage.getItem(STORAGE.VIEW) || 'library';
-    switchView(savedView);
-    renderLibrary();
-    
-    // Check for deep link
-    checkDeepLink();
-    
-  } catch (error) {
-    console.error('Error loading data:', error);
-    DOM.cardsGrid.innerHTML = '<p style="text-align: center; padding: 2rem; color: var(--text-secondary);">Failed to load data. Please check your connection.</p>';
-    showToast('Error', 'Failed to load data');
-  }
-}
-
-function checkDeepLink() {
-  const hash = window.location.hash;
-  if (hash.startsWith('#question-')) {
-    const id = parseInt(hash.replace('#question-', ''));
-    const item = state.allData.find(item => item.id === id);
-    if (item) {
-      openModal(item);
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, url });
+      toast("Shared", "Sent via share sheet.");
+      return;
+    } catch {
+      // fall through to copy
     }
   }
-}
 
-// Event Listeners
-// ===================================================
+  const ok = await copyToClipboard(url);
+  toast(ok ? "Link copied" : "Copy failed", ok ? "Share link copied to clipboard." : "Clipboard access blocked.");
+});
 
-function initEventListeners() {
-  // Theme
-  DOM.themeToggle.onclick = toggleTheme;
-  
-  // Brand
-  DOM.brandBtn.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
-  
-  // Tabs
-  DOM.tabBtns.forEach(btn => {
-    btn.onclick = () => switchView(btn.dataset.view);
-  });
-  
-  // Library - Search
-  const debouncedSearch = utils.debounce(() => {
-    state.filters.search = DOM.searchInput.value.trim();
-    state.currentPage = 1;
-    renderLibrary();
-  }, 300);
-  
-  DOM.searchInput.oninput = debouncedSearch;
-  DOM.clearSearchBtn.onclick = () => {
-    DOM.searchInput.value = '';
-    state.filters.search = '';
-    state.currentPage = 1;
-    renderLibrary();
-  };
-  
-  // Library - Filters
-  DOM.categoryFilter.onchange = () => {
-    state.filters.category = DOM.categoryFilter.value;
-    state.currentPage = 1;
-    renderLibrary();
-  };
-  
-  DOM.sortFilter.onchange = () => {
-    state.filters.sort = DOM.sortFilter.value;
-    state.currentPage = 1;
-    renderLibrary();
-  };
-  
-  DOM.mobileFilterBtn.onclick = openDrawer;
-  DOM.resetFiltersBtn.onclick = resetFilters;
-  DOM.resetFromEmpty.onclick = resetFilters;
-  
-  DOM.studyFilteredBtn.onclick = () => {
-    switchView('study');
-    startStudy('filtered');
-  };
-  
-  // Saved
-  DOM.studySavedBtn.onclick = () => {
-    switchView('study');
-    startStudy('saved');
-  };
-  
-  DOM.goToLibraryBtn.onclick = () => switchView('library');
-  
-  // Study
-  DOM.deckBtns.forEach(btn => {
-    btn.onclick = () => startStudy(btn.dataset.deck);
-  });
-  
-  DOM.shuffleDeckBtn.onclick = shuffleDeck;
-  DOM.restartDeckBtn.onclick = restartDeck;
-  DOM.revealBtn.onclick = revealAnswer;
-  DOM.detailsBtn.onclick = showCurrentCardDetails;
-  DOM.prevCardBtn.onclick = prevCard;
-  DOM.nextCardBtn.onclick = nextCard;
-  DOM.studyGoLibraryBtn.onclick = () => switchView('library');
-  
-  // Modal
-  DOM.modalCloseBtn.onclick = closeModal;
-  DOM.modalShareBtn.onclick = shareCard;
-  DOM.modalBookmarkBtn.onclick = () => {
-    if (state.currentModalId !== null) {
-      toggleBookmark(state.currentModalId);
+// Save from modal
+modalLoveBtn.addEventListener("click", () => {
+  if (currentModalId === null) return;
+  toggleFavorite(currentModalId);
+});
+
+// Deep link updates
+window.addEventListener("hashchange", () => {
+  const hash = window.location.hash || "";
+  if (!hash) {
+    if (modal.classList.contains("active")) closeModal({ keepHash: true });
+    return;
+  }
+  if (hash.startsWith("#question-")) {
+    const id = parseInt(hash.replace("#question-", ""), 10);
+    if (!Number.isNaN(id)) {
+      const item = allData.find((d) => d.id === id);
+      if (item) openModal(item, { fromHash: true });
     }
-  };
-  
-  // Close modal when clicking overlay
-  DOM.modal.querySelector('.modal-overlay').onclick = closeModal;
-  
-  // Drawer
-  DOM.applyFiltersBtn.onclick = applyMobileFilters;
-  DOM.resetFiltersMobileBtn.onclick = () => {
-    resetFilters();
-    closeDrawer();
-  };
-  
-  // Close drawer when clicking overlay or close buttons
-  DOM.drawer.querySelector('.drawer-overlay').onclick = closeDrawer;
-  DOM.drawer.querySelectorAll('[data-close="drawer"]').forEach(btn => {
-    btn.onclick = closeDrawer;
-  });
-  
-  // Keyboard shortcuts
-  document.addEventListener('keydown', (e) => {
-    // Modal shortcuts
-    if (!DOM.modal.classList.contains('hidden')) {
-      if (e.key === 'Escape') {
-        closeModal();
-      }
-      return;
-    }
-    
-    // Drawer shortcuts
-    if (!DOM.drawer.classList.contains('hidden')) {
-      if (e.key === 'Escape') {
-        closeDrawer();
-      }
-      return;
-    }
-    
-    // Study mode shortcuts
-    if (state.currentView === 'study' && state.study.deck.length > 0) {
-      if (e.key === ' ' || e.key === 'Spacebar') {
-        e.preventDefault();
-        revealAnswer();
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        nextCard();
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        prevCard();
-      } else if (e.key === 'Escape' && state.study.revealed) {
-        state.study.revealed = false;
-        renderStudyCard();
-      }
-    }
-  });
-  
-  // Handle browser back/forward
-  window.addEventListener('popstate', checkDeepLink);
-}
+  }
+});
 
-// Initialization
-// ===================================================
+// Saved empty buttons
+goLibraryBtn.addEventListener("click", () => switchView("library"));
 
-function init() {
-  initTheme();
-  initEventListeners();
-  loadData();
-}
-
-// Start the app when DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
+/* =========================
+   Start
+   ========================= */
+initPullToRefresh();
+fetchData();
