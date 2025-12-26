@@ -259,7 +259,7 @@ html[data-theme="light"] .brand-mark {
   margin: 0 auto;
   padding: 0 16px 12px 16px;
   display: grid;
-  grid-template-columns: repeat(2, 1fr); /* Changed to 2 columns */
+  grid-template-columns: repeat(2, 1fr); /* 2 columns for library/saved */
   gap: 10px;
 }
 
@@ -849,7 +849,7 @@ html[data-theme="light"] .skeleton {
 }
 .tag-btn:hover { background: var(--card2); }
 
-/* Answer content (shared modal + study) */
+/* Answer content */
 .answer {
   font-size: 1.02rem;
   line-height: 1.8;
@@ -864,6 +864,7 @@ html[data-theme="light"] .skeleton {
   border: 1px solid var(--border);
   margin: 12px 0 16px 0;
   display: block;
+  cursor: zoom-in; /* Indicate clickable */
 }
 .snippet-box {
   border: 1px solid var(--border);
@@ -914,7 +915,6 @@ pre[class*="language-"], code[class*="language-"] {
     top: auto;
     bottom: 0;
     width: 100%;
-    /* CHANGED: Increased gap from 12px to 60px to clear mobile status bar */
     max-height: calc(100vh - 60px);
     transform: translate(0, 16px);
     border-radius: 22px 22px 0 0;
@@ -961,6 +961,57 @@ pre[class*="language-"], code[class*="language-"] {
 }
 .toast .t-title { font-weight: 900; margin: 0; font-size: .95rem; }
 .toast .t-msg { margin: 2px 0 0 0; color: var(--muted); font-weight: 600; font-size: .92rem; }
+
+/* =========================================================
+   Image Viewer (Lightbox)
+   ========================================================= */
+.image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0,0,0,.95);
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.image-viewer.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.iv-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 210;
+}
+.iv-close {
+  background: rgba(255,255,255,.2);
+  color: #fff;
+  border: 0;
+}
+.iv-close:hover { background: rgba(255,255,255,.3); }
+
+.iv-content {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden; /* Important for zooming */
+  touch-action: none; /* Prevent default scroll */
+}
+
+#ivImage {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: center center;
+  will-change: transform;
+  /* transition handled in JS for drag, css for reset */
+}
 
 /* =========================================================
    Reduced motion
