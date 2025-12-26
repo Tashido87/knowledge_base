@@ -44,7 +44,19 @@ let lastTotalPages = 1;
 let ptrStartY = 0;
 let ptrDist = 0;
 let isRefreshing = false;
-const PTR_THRESHOLD = 80; // pixels to pull down to trigger
+const PTR_THRESHOLD = 80;
+
+// Image Viewer State
+let ivState = {
+  scale: 1,
+  panning: false,
+  pointX: 0,
+  pointY: 0,
+  startX: 0,
+  startY: 0,
+  startScale: 1,
+  startDist: 0,
+};
 
 /* =========================
    DOM
@@ -105,6 +117,12 @@ const toastStack = $("#toastStack");
 // PTR DOM
 const ptrLoader = $("#ptr-loader");
 const ptrIcon = ptrLoader ? ptrLoader.querySelector("i") : null;
+
+// Image Viewer DOM
+const ivOverlay = $("#imageViewer");
+const ivImage = $("#ivImage");
+const ivCloseBtn = $("#ivCloseBtn");
+const ivContent = $("#ivContent");
 
 /* =========================
    Helpers
@@ -432,7 +450,7 @@ function renderPagination(totalPages) {
     return b;
   };
 
-  // Prev (hidden on first page to match “1 2 3 4 5 > …” style)
+  // Prev
   if (currentPage > 1) {
     pagination.appendChild(
       mkBtn({
@@ -444,7 +462,7 @@ function renderPagination(totalPages) {
     );
   }
 
-  // Page numbers (5 at a time)
+  // Page numbers
   for (let p = groupStart; p <= groupEnd; p++) {
     pagination.appendChild(
       mkBtn({
@@ -467,7 +485,6 @@ function renderPagination(totalPages) {
     })
   );
 
-  // Ellipsis indicator when there are more pages beyond the current window
   if (groupEnd < totalPages) {
     const dots = document.createElement("span");
     dots.className = "page-ellipsis";
@@ -480,7 +497,6 @@ function renderPagination(totalPages) {
 function renderLibrary({ keepScroll = true } = {}) {
   if (!allData.length) return;
 
-  // Clear button visibility
   clearSearchBtn.classList.toggle("hidden", !(searchInput.value || "").trim());
 
   const items = getFilteredItems();
@@ -495,7 +511,6 @@ function renderLibrary({ keepScroll = true } = {}) {
 
   updateResultMeta({ totalItems, start, end, totalPages: lastTotalPages });
 
-  // Hide all, then append current page (cheap and stable)
   cardElements.forEach((el) => el.classList.add("hidden"));
 
   if (totalItems === 0) {
@@ -518,7 +533,6 @@ function renderLibrary({ keepScroll = true } = {}) {
   lucide.createIcons();
 
   if (!keepScroll) {
-    // Smoothly keep the grid in view when paging.
     try {
       grid.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch {
@@ -531,9 +545,7 @@ function renderLibrary({ keepScroll = true } = {}) {
    Saved
    ========================= */
 function createSavedCard(item) {
-  const card = createLibraryCard(item);
-  // In saved grid, card elements are new nodes; saving/un-saving re-renders anyway.
-  return card;
+  return createLibraryCard(item);
 }
 
 function renderSaved() {
@@ -570,7 +582,6 @@ function setSavedUIState(id) {
     btn.setAttribute("aria-label", saved ? "Remove from saved" : "Save");
   }
 
-  // Modal
   if (currentModalId === id) {
     modalLoveBtn.classList.toggle("saved", favorites.has(id));
     modalLoveBtn.setAttribute("aria-label", favorites.has(id) ? "Remove from saved" : "Save");
@@ -585,7 +596,6 @@ function toggleFavorite(id) {
   persistFavorites();
   setSavedUIState(id);
 
-  // Re-render saved view if needed
   if (views.saved.classList.contains("active")) renderSaved();
 
   toast(wasSaved ? "Removed" : "Saved", wasSaved ? "Removed from Saved." : "Added to Saved.");
@@ -609,14 +619,12 @@ function openModal(item, { fromHash = false } = {}) {
   currentModalId = item.id;
   lastFocusedElement = document.activeElement;
 
-  // Update hash (unless already from hash)
   if (!fromHash) window.location.hash = `question-${item.id}`;
 
   mCategory.textContent = item.category;
   mTitle.textContent = item.question;
   mAnswer.innerHTML = formatContent(item.answer, item.snippets, item.question);
 
-  // Tags (clickable)
   mTags.innerHTML = "";
   item.tagsArr.forEach((t) => {
     const btn = document.createElement("button");
@@ -627,16 +635,13 @@ function openModal(item, { fromHash = false } = {}) {
     mTags.appendChild(btn);
   });
 
-  // Save state
   modalLoveBtn.classList.toggle("saved", favorites.has(item.id));
   modalLoveBtn.setAttribute("aria-label", favorites.has(item.id) ? "Remove from saved" : "Save");
 
-  // Show
   modal.classList.add("active");
   modal.setAttribute("aria-hidden", "false");
   document.body.style.overflow = "hidden";
 
-  // Focus
   closeModalBtn.focus();
 
   lucide.createIcons();
@@ -651,7 +656,6 @@ function closeModal({ keepHash = false } = {}) {
   currentModalId = null;
 
   if (!keepHash) {
-    // Remove hash without forcing a scroll jump
     history.pushState("", document.title, window.location.pathname + window.location.search);
   }
 
@@ -661,7 +665,6 @@ function closeModal({ keepHash = false } = {}) {
 }
 
 function applyTagFilter(tag) {
-  // Switch to library, search for the tag
   closeModal();
   switchView("library");
   searchInput.value = tag;
@@ -671,13 +674,9 @@ function applyTagFilter(tag) {
 }
 
 /* =========================
-   Content formatting (safe)
+   Content formatting
    ========================= */
 function parseCodeSnippet(snippet) {
-  // Supported:
-  // code:<code>
-  // code:js|<code>
-  // code:python|<code>
   const raw = snippet.replace(/^code:/i, "");
   const pipeIndex = raw.indexOf("|");
   if (pipeIndex > 0) {
@@ -693,7 +692,6 @@ function formatContent(text, snippets, titleForAlt = "image") {
 
   const blocks = [];
 
-  // Replace placeholders with block tokens that become their own paragraph
   let raw = String(text).replace(/\[(image|code|img)[_\s]?(\d+)\]/gi, (_m, _type, num) => {
     const idx = parseInt(num, 10) - 1;
     if (Number.isNaN(idx) || idx < 0 || idx >= snippets.length) return "";
@@ -713,7 +711,8 @@ function formatContent(text, snippets, titleForAlt = "image") {
       `;
     } else if (snippet.toLowerCase().startsWith("image:")) {
       const url = snippet.replace(/^image:/i, "").trim();
-      html = `<img class="rendered-img" src="${escapeHtml(url)}" alt="Illustration for ${escapeHtml(titleForAlt)}">`;
+      // Add data-iv attribute to identify images for viewer
+      html = `<img class="rendered-img" src="${escapeHtml(url)}" alt="Illustration for ${escapeHtml(titleForAlt)}" loading="lazy" data-iv-src="${escapeHtml(url)}">`;
     } else {
       html = `<div class="snippet-box">${escapeHtml(snippet)}</div>`;
     }
@@ -723,13 +722,9 @@ function formatContent(text, snippets, titleForAlt = "image") {
     return `\n\n${token}\n\n`;
   });
 
-  // Escape remaining text to prevent injection
   raw = escapeHtml(raw);
-
-  // Bold: **text**
   raw = raw.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
 
-  // Split into paragraphs by blank lines
   const parts = raw.split(/\n\s*\n/g).map((p) => p.trim()).filter(Boolean);
 
   const htmlOut = parts.map((p) => {
@@ -738,7 +733,6 @@ function formatContent(text, snippets, titleForAlt = "image") {
       const idx = parseInt(m[1], 10);
       return blocks[idx] || "";
     }
-    // Convert single newlines to <br>
     const withBreaks = p.replace(/\n/g, "<br>");
     return `<p>${withBreaks}</p>`;
   }).join("");
@@ -746,16 +740,140 @@ function formatContent(text, snippets, titleForAlt = "image") {
   return htmlOut;
 }
 
-/* Code copy handling via event delegation */
+/* Code copy */
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest(".copy-btn");
   if (!btn) return;
-
   const text = decodeURIComponent(btn.getAttribute("data-copy") || "");
   const ok = await copyToClipboard(text);
-
-  toast(ok ? "Copied" : "Copy failed", ok ? "Code copied to clipboard." : "Your browser blocked clipboard access.");
+  toast(ok ? "Copied" : "Copy failed", ok ? "Code copied." : "Clipboard blocked.");
 });
+
+/* =========================
+   Image Viewer (Lightbox)
+   ========================= */
+function openImageViewer(src) {
+  if (!ivOverlay || !ivImage) return;
+
+  ivImage.src = src;
+  ivOverlay.classList.add("active");
+  ivOverlay.setAttribute("aria-hidden", "false");
+
+  // Reset transform
+  resetImageTransform();
+}
+
+function closeImageViewer() {
+  ivOverlay.classList.remove("active");
+  ivOverlay.setAttribute("aria-hidden", "true");
+  setTimeout(() => {
+    ivImage.src = "";
+    resetImageTransform();
+  }, 300);
+}
+
+function resetImageTransform() {
+  ivState = {
+    scale: 1,
+    panning: false,
+    pointX: 0,
+    pointY: 0,
+    startX: 0,
+    startY: 0,
+    startScale: 1,
+    startDist: 0,
+  };
+  updateImageTransform();
+}
+
+function updateImageTransform() {
+  if (!ivImage) return;
+  ivImage.style.transform = `translate(${ivState.pointX}px, ${ivState.pointY}px) scale(${ivState.scale})`;
+}
+
+// Distance between two touch points
+function getDistance(touches) {
+  return Math.hypot(
+    touches[0].clientX - touches[1].clientX,
+    touches[0].clientY - touches[1].clientY
+  );
+}
+
+// Touch event delegation for images in answer area
+document.addEventListener("click", (e) => {
+  if (e.target.matches("img.rendered-img")) {
+    const src = e.target.dataset.ivSrc || e.target.src;
+    openImageViewer(src);
+  }
+});
+
+// IV Event Listeners
+if (ivOverlay) {
+  ivCloseBtn.addEventListener("click", closeImageViewer);
+  ivOverlay.addEventListener("click", (e) => {
+    // Close if clicked outside the image
+    if (e.target === ivContent) closeImageViewer();
+  });
+
+  // Zoom / Pan Logic
+  ivContent.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 1) {
+      // Start Pan
+      ivState.panning = true;
+      ivState.startX = e.touches[0].clientX - ivState.pointX;
+      ivState.startY = e.touches[0].clientY - ivState.pointY;
+    } else if (e.touches.length === 2) {
+      // Start Pinch
+      ivState.panning = false;
+      ivState.startDist = getDistance(e.touches);
+      ivState.startScale = ivState.scale;
+    }
+  }, { passive: false });
+
+  ivContent.addEventListener("touchmove", (e) => {
+    e.preventDefault(); // Prevent page scroll when interacting with image
+
+    if (e.touches.length === 1 && ivState.panning) {
+      // Pan
+      // Only allow pan if zoomed in OR if we want to allow dragging freely
+      // Usually dragging when scale=1 feels loose, but let's allow moderate movement or stick to zoom
+      if (ivState.scale > 1) {
+        ivState.pointX = e.touches[0].clientX - ivState.startX;
+        ivState.pointY = e.touches[0].clientY - ivState.startY;
+        updateImageTransform();
+      }
+    } else if (e.touches.length === 2) {
+      // Pinch
+      const dist = getDistance(e.touches);
+      if (dist > 0) {
+        const diff = dist / ivState.startDist;
+        ivState.scale = Math.max(1, Math.min(ivState.startScale * diff, 5)); // Limit zoom 1x to 5x
+        updateImageTransform();
+      }
+    }
+  }, { passive: false });
+
+  ivContent.addEventListener("touchend", (e) => {
+    if (e.touches.length < 2) {
+      // If fingers lifted, check boundaries logic could go here
+      // For now, if scale < 1 reset to 1
+      if (ivState.scale < 1) {
+        ivState.scale = 1;
+        ivState.pointX = 0;
+        ivState.pointY = 0;
+        updateImageTransform();
+      }
+    }
+  });
+
+  // Handle window rotation (orientation change)
+  window.addEventListener("resize", () => {
+    if (ivOverlay.classList.contains("active")) {
+      // Reset position to center on rotate to avoid getting lost off-screen
+      resetImageTransform();
+    }
+  });
+}
 
 /* =========================
    Data fetching
@@ -767,7 +885,6 @@ async function fetchData() {
     const res = await fetch(API_URL);
     const json = await res.json();
 
-    // Remove skeleton
     if (skeleton) skeleton.remove();
 
     if (!json.values || !Array.isArray(json.values)) {
@@ -784,10 +901,7 @@ async function fetchData() {
       const answer = String(row[1] || "");
       const category = String(row[2] || "Uncategorized").trim() || "Uncategorized";
       const tags = String(row[3] || "");
-      const tagsArr = tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
+      const tagsArr = tags.split(",").map((t) => t.trim()).filter(Boolean);
 
       const snippets = [];
       for (let c = 6; c <= 11; c++) {
@@ -812,27 +926,21 @@ async function fetchData() {
     buildLibraryCards();
     syncMobileFiltersFromDesktop();
 
-    // Initial view
     const savedView = localStorage.getItem(LS_VIEW) || "library";
     switchView(savedView);
 
-    // Initial render(s)
     renderLibrary();
     renderSaved();
-
-    // Deep link
     checkHashForModal();
 
-    if (isRefreshing) {
-      toast("Refreshed", "Content updated from Google Sheets.");
-    }
+    if (isRefreshing) toast("Refreshed", "Content updated.");
 
   } catch (err) {
     console.error(err);
     if (skeleton) skeleton.remove();
     emptyState.classList.remove("hidden");
     resultMeta.textContent = "Error loading data";
-    toast("Error", "Could not load Google Sheets data. Check API key / Sheet ID.");
+    toast("Error", "Could not load Google Sheets data.");
   } finally {
     resetPTR();
   }
@@ -843,7 +951,6 @@ async function fetchData() {
    ========================= */
 function initPullToRefresh() {
   if (!ptrLoader) return;
-
   const app = document.getElementById("app") || document.body;
 
   app.addEventListener("touchstart", (e) => {
@@ -855,30 +962,22 @@ function initPullToRefresh() {
 
   app.addEventListener("touchmove", (e) => {
     if (window.scrollY > 0 || isRefreshing) return;
-
     const currentY = e.touches[0].clientY;
     const diff = currentY - ptrStartY;
-
     if (diff > 0) {
-      // Add resistance
       ptrDist = Math.pow(diff, 0.8);
       ptrLoader.style.opacity = Math.min(1, ptrDist / PTR_THRESHOLD);
       ptrLoader.style.transform = `translateY(${Math.min(ptrDist / 2, 40)}px) scale(${Math.min(1, ptrDist / PTR_THRESHOLD)})`;
-
-      if (ptrIcon) {
-        ptrIcon.style.transform = `rotate(${ptrDist * 3}deg)`;
-      }
+      if (ptrIcon) ptrIcon.style.transform = `rotate(${ptrDist * 3}deg)`;
     }
   }, { passive: true });
 
   app.addEventListener("touchend", () => {
     if (window.scrollY > 0 || isRefreshing) return;
-
     if (ptrDist > PTR_THRESHOLD) {
       isRefreshing = true;
       ptrLoader.classList.add("visible");
       ptrLoader.style.transform = "translateY(0) scale(1)";
-      // Keep loader visible
       fetchData();
     } else {
       resetPTR();
@@ -904,7 +1003,6 @@ function openDrawer() {
   filterDrawer.classList.add("active");
   filterDrawer.setAttribute("aria-hidden", "false");
   document.body.style.overflow = "hidden";
-  // Ensure current values
   syncMobileFiltersFromDesktop();
   if (sortSelectMobile) sortSelectMobile.focus();
 }
@@ -918,25 +1016,12 @@ function closeDrawer() {
 /* =========================
    Events
    ========================= */
-// Tabs
-tabs.forEach((btn) => {
-  btn.addEventListener("click", () => switchView(btn.dataset.view));
-});
+tabs.forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
 
-// Theme
 themeToggle.addEventListener("click", toggleTheme);
-
-// Brand scroll
 brandBtn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
 
-// Search
-searchInput.addEventListener(
-  "input",
-  debounce(() => {
-    resetPage();
-    renderLibrary();
-  }, 180)
-);
+searchInput.addEventListener("input", debounce(() => { resetPage(); renderLibrary(); }, 180));
 clearSearchBtn.addEventListener("click", () => {
   searchInput.value = "";
   searchInput.focus();
@@ -945,34 +1030,22 @@ clearSearchBtn.addEventListener("click", () => {
 });
 resetFiltersBtn.addEventListener("click", resetFilters);
 
-// Desktop filters
-sortSelect.addEventListener("change", () => {
-  syncMobileFiltersFromDesktop();
-  resetPage();
-  renderLibrary();
-});
-catSelect.addEventListener("change", () => {
-  syncMobileFiltersFromDesktop();
-  resetPage();
-  renderLibrary();
-});
+sortSelect.addEventListener("change", () => { syncMobileFiltersFromDesktop(); resetPage(); renderLibrary(); });
+catSelect.addEventListener("change", () => { syncMobileFiltersFromDesktop(); resetPage(); renderLibrary(); });
 
-// Keyboard shortcut: "/" to focus search (Library only)
 document.addEventListener("keydown", (e) => {
-  const isTyping =
-    e.target instanceof HTMLInputElement ||
-    e.target instanceof HTMLTextAreaElement ||
-    e.target instanceof HTMLSelectElement;
-
+  const isTyping = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement;
   if (!isTyping && e.key === "/") {
     if (views.library.classList.contains("active")) {
       e.preventDefault();
       searchInput.focus();
     }
   }
-
-  // ESC handling
   if (e.key === "Escape") {
+    if (ivOverlay && ivOverlay.classList.contains("active")) {
+      closeImageViewer();
+      return;
+    }
     if (modal.classList.contains("active")) {
       closeModal();
       return;
@@ -984,69 +1057,45 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Mobile filter drawer
 openFiltersBtn.addEventListener("click", () => openDrawer());
-
 filterDrawer.addEventListener("click", (e) => {
-  const shouldClose = e.target && (e.target.dataset.closeDrawer === "true");
-  if (shouldClose) closeDrawer();
+  if (e.target && e.target.dataset.closeDrawer === "true") closeDrawer();
 });
 
-// Mobile selects: live sync
-if (sortSelectMobile) {
-  sortSelectMobile.addEventListener("change", () => {
-    sortSelect.value = sortSelectMobile.value;
-    resetPage();
-    renderLibrary();
-  });
-}
-if (catSelectMobile) {
-  catSelectMobile.addEventListener("change", () => {
-    catSelect.value = catSelectMobile.value;
-    resetPage();
-    renderLibrary();
-  });
-}
+if (sortSelectMobile) sortSelectMobile.addEventListener("change", () => {
+  sortSelect.value = sortSelectMobile.value;
+  resetPage();
+  renderLibrary();
+});
+if (catSelectMobile) catSelectMobile.addEventListener("change", () => {
+  catSelect.value = catSelectMobile.value;
+  resetPage();
+  renderLibrary();
+});
 
 applyFiltersBtn.addEventListener("click", () => closeDrawer());
-resetFiltersBtnMobile.addEventListener("click", () => {
-  resetFilters();
-  closeDrawer();
-});
+resetFiltersBtnMobile.addEventListener("click", () => { resetFilters(); closeDrawer(); });
 
-// Modal close
 modal.addEventListener("click", (e) => {
-  const shouldClose = e.target && (e.target.dataset.closeModal === "true");
-  if (shouldClose) closeModal();
+  if (e.target && e.target.dataset.closeModal === "true") closeModal();
 });
 closeModalBtn.addEventListener("click", () => closeModal());
 
-// Share
 modalShareBtn.addEventListener("click", async () => {
   const url = window.location.href;
   const title = mTitle.textContent || "KnowledgeOcean";
-
   if (navigator.share) {
-    try {
-      await navigator.share({ title, url });
-      toast("Shared", "Sent via share sheet.");
-      return;
-    } catch {
-      // fall through to copy
-    }
+    try { await navigator.share({ title, url }); toast("Shared", "Sent via share sheet."); return; } catch {}
   }
-
   const ok = await copyToClipboard(url);
-  toast(ok ? "Link copied" : "Copy failed", ok ? "Share link copied to clipboard." : "Clipboard access blocked.");
+  toast(ok ? "Link copied" : "Copy failed", ok ? "Link copied." : "Clipboard blocked.");
 });
 
-// Save from modal
 modalLoveBtn.addEventListener("click", () => {
   if (currentModalId === null) return;
   toggleFavorite(currentModalId);
 });
 
-// Deep link updates
 window.addEventListener("hashchange", () => {
   const hash = window.location.hash || "";
   if (!hash) {
@@ -1062,7 +1111,6 @@ window.addEventListener("hashchange", () => {
   }
 });
 
-// Saved empty buttons
 goLibraryBtn.addEventListener("click", () => switchView("library"));
 
 /* =========================
