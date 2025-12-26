@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#f8fafc" />
-
+  <meta name="referrer" content="no-referrer">
   <title>KnowledgeOcean</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -65,7 +65,6 @@
           <i data-lucide="x" width="16" height="16"></i>
         </button>
       </div>
-
       <div class="quick"></div>
     </section>
   </header>
@@ -123,7 +122,7 @@
       <div class="view-head">
         <h2>Saved</h2>
         <p>Your favorites across devices (stored locally on this browser).</p>
-        </div>
+      </div>
 
       <div class="empty hidden" id="savedEmpty">
         <div class="empty-icon" aria-hidden="true">
@@ -139,8 +138,7 @@
 
       <section class="grid" id="favGrid" aria-label="Saved cards"></section>
     </section>
-
-    </main>
+  </main>
 
   <div class="drawer" id="filterDrawer" aria-hidden="true">
     <div class="drawer-overlay" data-close-drawer="true"></div>
@@ -221,6 +219,17 @@
           <p class="muted small">Tip: tap a tag to search it in Library.</p>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div id="imageViewer" class="image-viewer" aria-hidden="true">
+    <div class="iv-controls">
+      <button class="icon-btn ghost iv-close" id="ivCloseBtn" type="button" aria-label="Close image view">
+        <i data-lucide="x" width="24" height="24"></i>
+      </button>
+    </div>
+    <div class="iv-content" id="ivContent">
+      <img src="" alt="Fullscreen view" id="ivImage" />
     </div>
   </div>
 
